@@ -64,6 +64,16 @@ sidequest/
 - Python 3.12 + [uv](https://docs.astral.sh/uv/) (nur für lokale Entwicklung)
 - API-Keys: OpenRouteService (kostenlos) und deepseek (optional, für KI-Ranking)
 
+## Schnellstart (ein Befehl)
+
+```bash
+./start.sh
+```
+
+Das Skript startet bei Bedarf die Colima-VM, lädt fehlende BRouter-Segmente,
+baut/startet die Container, wartet auf das Backend und öffnet
+<http://localhost:8000> im Browser. Optionen: `--no-browser`, `--region eifel`.
+
 ## Setup
 
 ```bash

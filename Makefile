@@ -1,4 +1,4 @@
-.PHONY: install dev test lint typecheck check up down brouter-up brouter-segments
+.PHONY: install dev test lint typecheck check up down start brouter-up brouter-segments
 
 install:
 	cd backend && uv sync --extra dev
@@ -25,6 +25,9 @@ brouter-up:
 
 up:
 	docker compose up --build
+
+start:
+	./start.sh
 
 down:
 	docker compose down
