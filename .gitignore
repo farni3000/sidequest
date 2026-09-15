@@ -157,6 +157,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# sidequest
+/data/
+backend/data/
+
 # Spyder project settings
 .spyderproject
 .spyproject

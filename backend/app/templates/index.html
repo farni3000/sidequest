@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="{ roundTrip: false, bike: 'road' }" class="space-y-6">
+  <section class="rounded-xl bg-white p-5 shadow-sm">
+    <h2 class="mb-1 text-xl font-semibold">Deine Wunschroute</h2>
+    <p class="mb-5 text-sm text-slate-500">
+      Beschreibe, was du fahren willst – die KI sucht passende Highlights im Umkreis der Route.
+    </p>
+
+    <form
+      hx-post="/plan"
+      hx-target="#result"
+      hx-swap="innerHTML"
+      hx-indicator="#spinner"
+      class="grid grid-cols-1 gap-5 md:grid-cols-2"
+    >
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="bike_type">Fahrradart</label>
+        <select
+          id="bike_type"
+          name="bike_type"
+          x-model="bike"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        >
+          {% for option in bike_options %}
+          <option value="{{ option.value }}">{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div x-show="bike === 'mtb'" x-cloak>
+        <label class="mb-1 block text-sm font-medium" for="mtb_difficulty">MTB-Härtegrad</label>
+        <select
+          id="mtb_difficulty"
+          name="mtb_difficulty"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        >
+          {% for option in mtb_options %}
+          <option value="{{ option.value }}">{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="start">Start</label>
+        <input
+          id="start"
+          name="start"
+          required
+          placeholder="Adresse oder 50.85,4.35"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        />
+      </div>
+
+      <div x-show="!roundTrip" x-cloak>
+        <label class="mb-1 block text-sm font-medium" for="end">Ziel</label>
+        <input
+          id="end"
+          name="end"
+          placeholder="Adresse oder Koordinaten"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        />
+      </div>
+
+      <div class="flex items-center gap-2 md:col-span-1">
+        <input
+          id="round_trip"
+          name="round_trip"
+          type="checkbox"
+          x-model="roundTrip"
+          class="h-4 w-4 rounded border-slate-300 text-emerald-600"
+        />
+        <label for="round_trip" class="text-sm font-medium">Rundtour ab Startpunkt</label>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="distance_km">
+          Distanz (km) <span class="font-normal text-slate-400" x-show="!roundTrip">– optional</span>
+        </label>
+        <input
+          id="distance_km"
+          name="distance_km"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="z. B. 45"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        />
+      </div>
+
+      <div class="md:col-span-2" x-data="{ heat: 50 }">
+        <label class="mb-1 flex items-center justify-between text-sm font-medium" for="heat">
+          <span>Heat – Umwege für Highlights</span>
+          <span class="font-mono text-emerald-700" x-text="heat"></span>
+        </label>
+        <input
+          id="heat"
+          name="heat"
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          x-model.number="heat"
+          class="w-full accent-emerald-600"
+        />
+        <p class="mt-1 text-xs text-slate-500">
+          0 = kürzeste Route, 100 = maximale Umwege für Highlights.
+        </p>
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="mb-1 block text-sm font-medium" for="freetext">Wünsche (Freitext)</label>
+        <textarea
+          id="freetext"
+          name="freetext"
+          rows="2"
+          placeholder="z. B. gerne an einem See vorbei, keine viel befahrenen Straßen"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none"
+        ></textarea>
+      </div>
+
+      <div class="md:col-span-2 flex items-center gap-3">
+        <button
+          type="submit"
+          class="rounded-lg bg-emerald-600 px-5 py-2.5 font-medium text-white shadow hover:bg-emerald-700"
+        >
+          Route planen
+        </button>
+        <span id="spinner" class="htmx-indicator text-sm text-slate-500">
+          Plane Route … (Routing + POI-Suche + KI)
+        </span>
+      </div>
+    </form>
+  </section>
+
+  <section id="result" class="space-y-6">
+    <div class="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">
+      Noch keine Route berechnet. Formular ausfüllen und „Route planen“ klicken.
+    </div>
+  </section>
+</div>
+{% endblock %}

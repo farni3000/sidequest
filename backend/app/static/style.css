@@ -1,0 +1,17 @@
+.leaflet-container {
+  z-index: 0;
+  font: inherit;
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: inline;
+}

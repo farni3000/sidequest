@@ -1,0 +1,112 @@
+<script type="application/json" id="plan-data">{{ plan.model_dump() | tojson }}</script>
+
+<div class="space-y-5">
+  <div class="rounded-xl bg-white p-5 shadow-sm">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold">
+          {{ plan.start_label }}
+          {% if not plan.round_trip %}→ {{ plan.end_label }}{% endif %}
+        </h2>
+        <p class="text-sm text-slate-500">
+          {{ plan.bike_type_label }}{% if plan.mtb_difficulty %} · {{ plan.mtb_difficulty }}{% endif %}
+          · Heat {{ plan.heat }}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+          Routing: {{ plan.provider_used }}
+        </span>
+        {% if plan.ai_used %}
+        <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+          KI-Auswahl
+        </span>
+        {% else %}
+        <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+          Regelbasierte Auswahl
+        </span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if plan.summary %}
+    <p class="mt-3 text-sm text-slate-600">{{ plan.summary }}</p>
+    {% endif %}
+
+    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Distanz</div>
+        <div class="text-xl font-semibold">{{ "%.1f"|format(plan.distance_km) }} km</div>
+        {% if plan.requested_distance_km %}
+        <div class="text-xs text-slate-400">Wunsch: {{ "%.0f"|format(plan.requested_distance_km) }} km</div>
+        {% endif %}
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Höhenmeter ↑</div>
+        <div class="text-xl font-semibold">{{ "%.0f"|format(plan.elevation_gain_m) }} m</div>
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Höhenmeter ↓</div>
+        <div class="text-xl font-semibold">{{ "%.0f"|format(plan.elevation_loss_m) }} m</div>
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Highlights</div>
+        <div class="text-xl font-semibold">{{ plan.highlights|length }}</div>
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-3">
+      <a
+        href="{{ plan.gpx_url }}"
+        class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
+      >
+        Als GPX exportieren
+      </a>
+      <span class="self-center text-xs text-slate-400">Import in Komoot oder jede Karten-App möglich.</span>
+    </div>
+
+    {% if plan.warnings %}
+    <ul class="mt-4 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+      {% for warning in plan.warnings %}
+      <li>⚠ {{ warning }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="rounded-xl bg-white p-3 shadow-sm">
+    <div id="route-map" class="h-80 w-full rounded-lg sm:h-96"></div>
+  </div>
+
+  <div class="rounded-xl bg-white p-4 shadow-sm">
+    <h3 class="mb-3 font-semibold">Höhenprofil</h3>
+    <div class="h-48"><canvas id="elevation-chart"></canvas></div>
+  </div>
+
+  {% if plan.highlights %}
+  <div class="rounded-xl bg-white p-5 shadow-sm">
+    <h3 class="mb-3 font-semibold">Eingebaute Highlights</h3>
+    <ol class="space-y-3">
+      {% for highlight in plan.highlights %}
+      <li class="flex items-start gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
+          {{ highlight.order_index }}
+        </span>
+        <div>
+          <div class="font-medium">
+            {{ highlight.name }}
+            <span class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+              {{ highlight.category }}
+            </span>
+          </div>
+          {% if highlight.rationale %}
+          <p class="text-sm text-slate-500">{{ highlight.rationale }}</p>
+          {% endif %}
+          <p class="text-xs text-slate-400">ca. {{ "%.1f"|format(highlight.detour_km) }} km Umweg</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+</div>
