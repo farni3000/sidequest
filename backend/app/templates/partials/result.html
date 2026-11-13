@@ -1,9 +1,9 @@
 <script type="application/json" id="plan-data">{{ plan.model_dump() | tojson }}</script>
 
-<div class="result-enter space-y-6">
+<div class="result-enter space-y-5">
   <!-- Route summary -->
-  <div class="glass-card overflow-hidden">
-    <div class="relative border-b border-white/[0.06] p-5 sm:p-6">
+  <section class="panel">
+    <div class="p-5 sm:p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
           <p class="eyebrow">Deine Route</p>
@@ -27,7 +27,7 @@
           </span>
           {% if plan.ai_used %}
           <span class="chip chip-lime">
-            <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
               <path
                 d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"
                 stroke="currentColor"
@@ -48,88 +48,86 @@
       {% if plan.summary %}
       <p class="mt-4 max-w-3xl text-sm leading-relaxed text-foam/80">{{ plan.summary }}</p>
       {% endif %}
+
+      <div class="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div class="stat-tile" style="--tile-glow: rgba(200, 245, 96, 0.24)">
+          <div class="stat-label">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
+              <path
+                d="M6 4v7a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v3"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+              <circle cx="6" cy="4" r="1.8" fill="currentColor" />
+              <circle cx="18" cy="20" r="1.8" fill="currentColor" />
+            </svg>
+            Distanz
+          </div>
+          <div class="stat-value">
+            {{ "%.1f"|format(plan.distance_km) }}<span class="stat-unit">km</span>
+          </div>
+          {% if plan.requested_distance_km %}
+          <div class="mt-1 text-[11px] text-sage/80">
+            Wunsch: {{ "%.0f"|format(plan.requested_distance_km) }} km
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="stat-tile" style="--tile-glow: rgba(52, 211, 153, 0.22)">
+          <div class="stat-label">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-emerald-300">
+              <path
+                d="M4 17 10 9l4 4 6-8m0 0h-4m4 0v4"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Höhenmeter ↑
+          </div>
+          <div class="stat-value">
+            {{ "%.0f"|format(plan.elevation_gain_m) }}<span class="stat-unit">m</span>
+          </div>
+        </div>
+
+        <div class="stat-tile" style="--tile-glow: rgba(56, 189, 248, 0.2)">
+          <div class="stat-label">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-sky-300">
+              <path
+                d="M4 7 10 15l4-4 6 8m0 0h-4m4 0v-4"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Höhenmeter ↓
+          </div>
+          <div class="stat-value">
+            {{ "%.0f"|format(plan.elevation_loss_m) }}<span class="stat-unit">m</span>
+          </div>
+        </div>
+
+        <div class="stat-tile" style="--tile-glow: rgba(244, 114, 182, 0.18)">
+          <div class="stat-label">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-pink-300">
+              <path
+                d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Highlights
+          </div>
+          <div class="stat-value">{{ plan.highlights|length }}</div>
+        </div>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4 sm:p-6">
-      <div class="stat-tile" style="--tile-glow: rgba(200, 245, 96, 0.22)">
-        <div class="stat-label">
-          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-lime-300">
-            <path
-              d="M6 4v7a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v3"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-            />
-            <circle cx="6" cy="4" r="1.8" fill="currentColor" />
-            <circle cx="18" cy="20" r="1.8" fill="currentColor" />
-          </svg>
-          Distanz
-        </div>
-        <div class="stat-value">
-          {{ "%.1f"|format(plan.distance_km) }}<span class="stat-unit">km</span>
-        </div>
-        {% if plan.requested_distance_km %}
-        <div class="mt-1 text-[11px] text-sage/80">
-          Wunsch: {{ "%.0f"|format(plan.requested_distance_km) }} km
-        </div>
-        {% endif %}
-      </div>
-
-      <div class="stat-tile" style="--tile-glow: rgba(52, 211, 153, 0.2)">
-        <div class="stat-label">
-          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-emerald-300">
-            <path
-              d="M4 17 10 9l4 4 6-8m0 0h-4m4 0v4"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Höhenmeter ↑
-        </div>
-        <div class="stat-value">
-          {{ "%.0f"|format(plan.elevation_gain_m) }}<span class="stat-unit">m</span>
-        </div>
-      </div>
-
-      <div class="stat-tile" style="--tile-glow: rgba(56, 189, 248, 0.18)">
-        <div class="stat-label">
-          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-sky-300">
-            <path
-              d="M4 7 10 15l4-4 6 8m0 0h-4m4 0v-4"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Höhenmeter ↓
-        </div>
-        <div class="stat-value">
-          {{ "%.0f"|format(plan.elevation_loss_m) }}<span class="stat-unit">m</span>
-        </div>
-      </div>
-
-      <div class="stat-tile" style="--tile-glow: rgba(244, 114, 182, 0.16)">
-        <div class="stat-label">
-          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-pink-300">
-            <path
-              d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linejoin="round"
-            />
-          </svg>
-          Highlights
-        </div>
-        <div class="stat-value">{{ plan.highlights|length }}</div>
-      </div>
-    </div>
-
-    <div
-      class="flex flex-wrap items-center gap-3 border-t border-white/[0.06] px-5 py-4 sm:px-6"
-    >
+    <div class="flex flex-wrap items-center gap-3 border-t border-white/[0.06] px-5 py-4 sm:px-6">
       <a href="{{ plan.gpx_url }}" class="btn-primary text-sm">
         <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
           <path
@@ -146,11 +144,11 @@
     </div>
 
     {% if plan.warnings %}
-    <div class="border-t border-white/[0.06] p-5 sm:p-6">
-      <ul class="space-y-1.5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-xs leading-relaxed text-amber-100/90">
+    <div class="border-t border-white/[0.06] px-5 py-4 sm:px-6">
+      <ul class="space-y-1.5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3.5 text-xs leading-relaxed text-amber-100/90">
         {% for warning in plan.warnings %}
         <li class="flex items-start gap-2">
-          <svg viewBox="0 0 24 24" fill="none" class="mt-px h-3.5 w-3.5 flex-none text-amber-300">
+          <svg viewBox="0 0 24 24" fill="none" class="mt-px h-4 w-4 flex-none text-amber-300">
             <path
               d="M12 9v4m0 4h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
               stroke="currentColor"
@@ -165,14 +163,14 @@
       </ul>
     </div>
     {% endif %}
-  </div>
+  </section>
 
-  <!-- Map -->
-  <div class="glass-card overflow-hidden">
-    <div class="flex items-center justify-between gap-3 px-5 py-4">
-      <div class="flex items-center gap-2.5">
+  <!-- Route + elevation in one panel -->
+  <section class="panel">
+    <div class="panel-head">
+      <div class="flex items-center gap-3">
         <span class="section-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
+          <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
             <path
               d="m9 4-5 2v14l5-2m0-14 6 2m-6-2v14m6-12 5-2v14l-5 2m0-14v14m-6 0 6-2"
               stroke="currentColor"
@@ -182,21 +180,22 @@
             />
           </svg>
         </span>
-        <h3 class="font-display text-base font-semibold">Streckenverlauf</h3>
+        <div>
+          <h3 class="font-display text-base font-semibold">Strecke</h3>
+          <p class="text-xs text-sage">Karte &amp; Höhenprofil</p>
+        </div>
       </div>
-      <span class="chip hidden sm:inline-flex">
-        {{ plan.highlights|length }} Highlights entlang der Strecke
+      <span class="chip">
+        {{ "%.1f"|format(plan.distance_km) }} km · {{ plan.highlights|length }} Highlights
       </span>
     </div>
-    <div id="route-map" class="h-[22rem] w-full sm:h-[27rem]"></div>
-  </div>
 
-  <!-- Elevation -->
-  <div class="glass-card p-5 sm:p-6">
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <div class="flex items-center gap-2.5">
-        <span class="section-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
+    <div id="route-map" class="h-[22rem] w-full sm:h-[26rem]"></div>
+
+    <div class="border-t border-white/[0.06] p-5 sm:p-6">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2 text-sm font-medium text-foam">
+          <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
             <path
               d="M4 19V5m0 14h16M7 15l4-5 3 3 4-6"
               stroke="currentColor"
@@ -205,21 +204,21 @@
               stroke-linejoin="round"
             />
           </svg>
-        </span>
-        <h3 class="font-display text-base font-semibold">Höhenprofil</h3>
+          Höhenprofil
+        </div>
+        <span class="chip" id="elev-range">–</span>
       </div>
-      <span class="chip" id="elev-range">–</span>
+      <div class="h-48"><canvas id="elevation-chart"></canvas></div>
     </div>
-    <div class="h-52"><canvas id="elevation-chart"></canvas></div>
-  </div>
+  </section>
 
   <!-- Highlights -->
   {% if plan.highlights %}
-  <div class="glass-card p-5 sm:p-6">
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-2">
-      <div class="flex items-center gap-2.5">
+  <section class="panel">
+    <div class="panel-head">
+      <div class="flex items-center gap-3">
         <span class="section-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
+          <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
             <path
               d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
               stroke="currentColor"
@@ -228,46 +227,52 @@
             />
           </svg>
         </span>
-        <h3 class="font-display text-base font-semibold">Eingebaute Highlights</h3>
+        <div>
+          <h3 class="font-display text-base font-semibold">Eingebaute Highlights</h3>
+          <p class="text-xs text-sage">Deine Stopps in Reihenfolge</p>
+        </div>
       </div>
       <span class="chip">{{ plan.highlights|length }} Stopps</span>
     </div>
 
-    <ol class="timeline">
-      {% for highlight in plan.highlights %}
-      <li class="timeline-item">
-        <span class="timeline-node">{{ highlight.order_index }}</span>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="font-medium text-foam">{{ highlight.name }}</span>
-          <span class="chip chip-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
-            {{ highlight.category }}
-          </span>
-        </div>
-        {% if highlight.rationale %}
-        <p class="mt-1 text-sm leading-relaxed text-sage">{{ highlight.rationale }}</p>
-        {% endif %}
-        <p class="mt-1.5 flex items-center gap-1.5 text-xs text-sage/80">
-          <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-lime-300/80">
-            <path
-              d="M4 9a8 8 0 0 1 13.7-5.7L20 5.5M20 15a8 8 0 0 1-13.7 5.7L4 18.5"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <path
-              d="M20 2v4h-4M4 22v-4h4"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          ca. {{ "%.1f"|format(highlight.detour_km) }} km Umweg
-        </p>
-      </li>
-      {% endfor %}
-    </ol>
-  </div>
+    <div class="p-5 sm:p-6">
+      <ol class="timeline">
+        {% for highlight in plan.highlights %}
+        <li class="timeline-item">
+          <span class="timeline-node">{{ highlight.order_index }}</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium text-foam">{{ highlight.name }}</span>
+            <span class="chip chip-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+              {{ highlight.category }}
+            </span>
+          </div>
+          {% if highlight.rationale %}
+          <p class="mt-1 text-sm leading-relaxed text-sage">{{ highlight.rationale }}</p>
+          {% endif %}
+          <p class="mt-1.5 flex items-center gap-1.5 text-xs text-sage/80">
+            <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5 text-lime-300/80">
+              <path
+                d="M4 9a8 8 0 0 1 13.7-5.7L20 5.5M20 15a8 8 0 0 1-13.7 5.7L4 18.5"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M20 2v4h-4M4 22v-4h4"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            ca. {{ "%.1f"|format(highlight.detour_km) }} km Umweg
+          </p>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </section>
   {% endif %}
 </div>
+

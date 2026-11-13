@@ -111,15 +111,15 @@
     // Soft glow underneath the crisp route line.
     L.polyline(coords, {
       color: "#c8f560",
-      weight: 14,
-      opacity: 0.12,
+      weight: 16,
+      opacity: 0.16,
       lineCap: "round",
       lineJoin: "round",
     }).addTo(map);
 
     var line = L.polyline(coords, {
       color: "#d9fb7a",
-      weight: 3.5,
+      weight: 4.2,
       opacity: 0.95,
       lineCap: "round",
       lineJoin: "round",
@@ -206,8 +206,8 @@
     var ctx = canvas.getContext("2d");
     var height = (canvas.parentElement && canvas.parentElement.clientHeight) || 200;
     var fill = ctx.createLinearGradient(0, 0, 0, height);
-    fill.addColorStop(0, "rgba(200, 245, 96, 0.38)");
-    fill.addColorStop(0.55, "rgba(52, 211, 153, 0.12)");
+    fill.addColorStop(0, "rgba(200, 245, 96, 0.42)");
+    fill.addColorStop(0.55, "rgba(52, 211, 153, 0.14)");
     fill.addColorStop(1, "rgba(52, 211, 153, 0)");
 
     currentChart = new Chart(ctx, {
@@ -220,7 +220,7 @@
             data: data,
             borderColor: "#c8f560",
             backgroundColor: fill,
-            borderWidth: 2.4,
+            borderWidth: 2.8,
             pointRadius: 0,
             pointHoverRadius: 4,
             pointHoverBackgroundColor: "#eaffc0",
