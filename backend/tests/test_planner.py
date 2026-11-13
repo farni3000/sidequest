@@ -98,3 +98,19 @@ async def test_routing_failure_raises_plan_error(monkeypatch, session, settings)
     form = PlanForm(bike_type=BikeType.road, start="Spa", end="Stavelot")
     with pytest.raises(PlanError):
         await create_plan(form, session, settings, providers=[MockProvider("down", fail=True)])
+
+
+def test_mtb_difficulty_only_applies_to_mtb() -> None:
+    gravel = PlanForm(
+        bike_type=BikeType.gravel,
+        mtb_difficulty=MtbDifficulty.xc,
+        start="Spa",
+    )
+    assert gravel.mtb_difficulty is None
+
+    mtb = PlanForm(
+        bike_type=BikeType.mtb,
+        mtb_difficulty=MtbDifficulty.enduro,
+        start="Spa",
+    )
+    assert mtb.mtb_difficulty is MtbDifficulty.enduro

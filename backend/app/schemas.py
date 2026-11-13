@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from .routing.base import BikeType, MtbDifficulty
 
@@ -42,3 +42,9 @@ class PlanForm(BaseModel):
         if value is not None and value <= 0:
             return None
         return value
+
+    @model_validator(mode="after")
+    def _clear_mtb_difficulty_for_other_bikes(self) -> PlanForm:
+        if self.bike_type is not BikeType.mtb:
+            self.mtb_difficulty = None
+        return self
