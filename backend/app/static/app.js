@@ -6,22 +6,31 @@
   var currentChart = null;
 
   var CATEGORY_COLORS = {
-    viewpoint: "#0ea5e9",
-    peak: "#7c3aed",
-    lake: "#2563eb",
-    historic: "#b45309",
-    mountain_pass: "#dc2626",
-    mtb_trail: "#16a34a",
-    mtb_route: "#16a34a",
-    attraction: "#db2777",
-    picnic_site: "#65a30d",
-    park: "#059669",
-    track: "#ca8a04",
-    poi: "#64748b",
+    viewpoint: "#38bdf8",
+    peak: "#a78bfa",
+    lake: "#60a5fa",
+    historic: "#fbbf24",
+    mountain_pass: "#fb7185",
+    mtb_trail: "#4ade80",
+    mtb_route: "#4ade80",
+    attraction: "#f472b6",
+    picnic_site: "#a3e635",
+    park: "#34d399",
+    track: "#facc15",
+    poi: "#94a3b8",
   };
 
   function colorFor(category) {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS.poi;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function haversineKm(a, b) {
@@ -55,6 +64,16 @@
     return { geometry: outGeo, elevations: outEle };
   }
 
+  function dotIcon(extraClass, color) {
+    return L.divIcon({
+      className: "marker-dot pulse " + extraClass,
+      html: "",
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      popupAnchor: [0, -12],
+    });
+  }
+
   function renderMap(plan) {
     var el = document.getElementById("route-map");
     if (!el) return;
@@ -68,55 +87,93 @@
     });
     if (!coords.length) return;
 
-    var map = L.map(el);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
+    var map = L.map(el, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      worldCopyJump: true,
+    });
+
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      {
+        maxZoom: 19,
+        attribution:
+          'Tiles &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> — Esri, DeLorme, NAVTEQ',
+      }
+    ).addTo(map);
+
+    // Labels sit on a separate Esri layer; omit its attribution to avoid duplicates.
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "" }
+    ).addTo(map);
+
+    // Soft glow underneath the crisp route line.
+    L.polyline(coords, {
+      color: "#c8f560",
+      weight: 14,
+      opacity: 0.12,
+      lineCap: "round",
+      lineJoin: "round",
     }).addTo(map);
 
-    var line = L.polyline(coords, { color: "#059669", weight: 4, opacity: 0.85 }).addTo(map);
+    var line = L.polyline(coords, {
+      color: "#d9fb7a",
+      weight: 3.5,
+      opacity: 0.95,
+      lineCap: "round",
+      lineJoin: "round",
+    }).addTo(map);
 
-    L.circleMarker(coords[0], {
-      radius: 7,
-      color: "#065f46",
-      fillColor: "#10b981",
-      fillOpacity: 1,
+    L.marker(coords[0], {
+      icon: dotIcon("marker-start"),
+      zIndexOffset: 500,
     })
       .addTo(map)
-      .bindPopup("Start");
+      .bindPopup("<strong>Start</strong><br>" + escapeHtml(plan.start_label || ""));
 
     if (!plan.round_trip) {
-      L.circleMarker(coords[coords.length - 1], {
-        radius: 7,
-        color: "#7f1d1d",
-        fillColor: "#ef4444",
-        fillOpacity: 1,
+      L.marker(coords[coords.length - 1], {
+        icon: dotIcon("marker-end"),
+        zIndexOffset: 500,
       })
         .addTo(map)
-        .bindPopup("Ziel");
+        .bindPopup("<strong>Ziel</strong><br>" + escapeHtml(plan.end_label || ""));
     }
 
     (plan.highlights || []).forEach(function (highlight, index) {
-      L.circleMarker([highlight.lat, highlight.lon], {
-        radius: 8,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: colorFor(highlight.category),
-        fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindPopup(
-          "<strong>" +
-            (index + 1) +
-            ". " +
-            highlight.name +
-            "</strong><br>" +
-            (highlight.rationale || highlight.category)
-        );
+      var marker = L.marker([highlight.lat, highlight.lon], {
+        icon: L.divIcon({
+          className: "poi-marker",
+          html: String(index + 1),
+          iconSize: [27, 27],
+          iconAnchor: [13.5, 13.5],
+          popupAnchor: [0, -15],
+        }),
+      }).addTo(map);
+
+      var node = marker.getElement();
+      if (node) {
+        node.style.setProperty("--marker-color", colorFor(highlight.category));
+      }
+
+      marker.bindPopup(
+        "<strong>" +
+          (index + 1) +
+          ". " +
+          escapeHtml(highlight.name) +
+          "</strong><br>" +
+          escapeHtml(highlight.rationale || highlight.category)
+      );
     });
 
-    map.fitBounds(line.getBounds(), { padding: [24, 24] });
+    map.fitBounds(line.getBounds(), { padding: [30, 30] });
     currentMap = map;
+
+    // The map lives inside freshly swapped HTMX content – recalculate its size.
+    requestAnimationFrame(function () {
+      if (currentMap === map) map.invalidateSize();
+    });
   }
 
   function renderChart(plan) {
@@ -139,7 +196,21 @@
       data.push(sampled.elevations[i]);
     }
 
-    currentChart = new Chart(canvas.getContext("2d"), {
+    var elevBadge = document.getElementById("elev-range");
+    if (elevBadge && data.length) {
+      var min = Math.round(Math.min.apply(null, data));
+      var max = Math.round(Math.max.apply(null, data));
+      elevBadge.textContent = "Min " + min + " m · Max " + max + " m";
+    }
+
+    var ctx = canvas.getContext("2d");
+    var height = (canvas.parentElement && canvas.parentElement.clientHeight) || 200;
+    var fill = ctx.createLinearGradient(0, 0, 0, height);
+    fill.addColorStop(0, "rgba(200, 245, 96, 0.38)");
+    fill.addColorStop(0.55, "rgba(52, 211, 153, 0.12)");
+    fill.addColorStop(1, "rgba(52, 211, 153, 0)");
+
+    currentChart = new Chart(ctx, {
       type: "line",
       data: {
         labels: labels,
@@ -147,31 +218,70 @@
           {
             label: "Höhe (m)",
             data: data,
-            borderColor: "#059669",
-            backgroundColor: "rgba(5, 150, 105, 0.15)",
-            borderWidth: 2,
+            borderColor: "#c8f560",
+            backgroundColor: fill,
+            borderWidth: 2.4,
             pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHoverBackgroundColor: "#eaffc0",
+            pointHoverBorderColor: "#08110c",
+            pointHoverBorderWidth: 2,
             fill: true,
-            tension: 0.25,
+            tension: 0.28,
           },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: { duration: 700 },
         interaction: { mode: "index", intersect: false },
         scales: {
           x: {
-            title: { display: true, text: "km" },
-            ticks: { maxTicksLimit: 8 },
+            border: { display: false },
+            ticks: {
+              color: "#7f968c",
+              font: { size: 10 },
+              maxTicksLimit: 8,
+              maxRotation: 0,
+            },
             grid: { display: false },
           },
           y: {
-            title: { display: true, text: "m" },
-            grid: { color: "rgba(148, 163, 184, 0.2)" },
+            border: { display: false },
+            ticks: {
+              color: "#7f968c",
+              font: { size: 10 },
+              maxTicksLimit: 5,
+              callback: function (value) {
+                return value + " m";
+              },
+            },
+            grid: { color: "rgba(255, 255, 255, 0.055)" },
           },
         },
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(10, 15, 13, 0.94)",
+            borderColor: "rgba(255, 255, 255, 0.12)",
+            borderWidth: 1,
+            titleColor: "#91a79d",
+            bodyColor: "#eaffc0",
+            bodyFont: { family: "Inter", size: 12, weight: "600" },
+            titleFont: { family: "Inter", size: 10 },
+            padding: 10,
+            displayColors: false,
+            callbacks: {
+              title: function (items) {
+                return items.length ? items[0].label + " km" : "";
+              },
+              label: function (item) {
+                return Math.round(item.parsed.y) + " m";
+              },
+            },
+          },
+        },
       },
     });
   }

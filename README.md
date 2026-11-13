@@ -24,8 +24,8 @@ oder jede andere Karten-App.
   dem Heat-Wert (500 m – 8 km).
 - **deepseek** (OpenAI-kompatibel) wählt per Tool-Call die Highlights aus und
   ordnet sie; ohne Key/bei Fehler greift eine distanzbasierte Auswahl.
-- Ergebnisansicht mit Leaflet-Karte, Höhenprofil (Chart.js), Highlight-Liste mit
-  Begründung und GPX-Download.
+- Ergebnisansicht im dunklen „Night Ride“-Design mit Leaflet-Karte,
+  Höhenprofil (Chart.js), Highlight-Timeline mit Begründung und GPX-Download.
 - SQLModel/SQLite-Persistenz; alle relevanten Tabellen haben von Beginn an ein
   nullable `user_id`-Feld für spätere Multi-User-Erweiterung.
 
