@@ -4,7 +4,7 @@ install:
 	cd backend && uv sync --extra dev
 
 dev:
-	cd backend && uv run uvicorn app.main:app --reload
+	cd backend && uv run uvicorn app.main:app --reload --port 8001
 
 test:
 	cd backend && uv run pytest

@@ -72,7 +72,7 @@ sidequest/
 
 Das Skript startet bei Bedarf die Colima-VM, lädt fehlende BRouter-Segmente,
 baut/startet die Container, wartet auf das Backend und öffnet
-<http://localhost:8000> im Browser. Optionen: `--no-browser`, `--region eifel`.
+<http://localhost:8001> im Browser. Optionen: `--no-browser`, `--region eifel`.
 
 ## Setup
 
@@ -106,7 +106,7 @@ BRouter-Kacheln sind 5×5-Grad-Quadrate; der Name ist die Südwest-Ecke, z. B.
 
 ```bash
 docker compose up --build
-# Backend:  http://localhost:8000
+# Backend:  http://localhost:8001
 # BRouter:  http://localhost:17777
 ```
 
@@ -116,7 +116,7 @@ docker compose up --build
 docker compose up -d brouter          # nur die Routing-Engine
 cd backend
 uv sync --extra dev
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --port 8001
 ```
 
 ## Konfiguration
