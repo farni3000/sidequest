@@ -13,9 +13,10 @@ oder jede andere Karten-App.
 
 ## Funktionsumfang
 
-- Formular: Fahrradart (Rennrad / Gravel / MTB mit Härtegrad XC / All Mountain /
-  Enduro / Trekking-Wandern), Start/Ziel oder Rundtour, Distanz, Heat 0–100,
-  Freitext.
+- Direkt bedienbares Formular ohne Dropdowns: Fahrradart als Klick-Karten
+  (Rennrad / Gravel / MTB mit Härtegrad XC / All Mountain / Enduro /
+  Trekking-Wandern), Start/Ziel oder Rundtour als Segmente, Distanz- und
+  Heat-Slider (0–100) sowie Freitext mit anklickbaren Wunsch-Vorschlägen.
 - Routing über austauschbare Provider mit automatischem Fallback:
   - **BRouter** (self-hosted, Docker) – primär für MTB/Trekking
   - **OpenRouteService** (Cloud, Free Tier) – primär für Rennrad/Gravel
@@ -24,8 +25,9 @@ oder jede andere Karten-App.
   dem Heat-Wert (500 m – 8 km).
 - **deepseek** (OpenAI-kompatibel) wählt per Tool-Call die Highlights aus und
   ordnet sie; ohne Key/bei Fehler greift eine distanzbasierte Auswahl.
-- Ergebnisansicht im dunklen „Night Ride“-Design mit Leaflet-Karte,
+- Ergebnisansicht im warmen „Alpine Pine“-Design mit heller Topo-Karte,
   Höhenprofil (Chart.js), Highlight-Timeline mit Begründung und GPX-Download.
+  Alle Auswahl- und Eingabeelemente sind auf direkte Klicks ausgelegt.
 - SQLModel/SQLite-Persistenz; alle relevanten Tabellen haben von Beginn an ein
   nullable `user_id`-Feld für spätere Multi-User-Erweiterung.
 

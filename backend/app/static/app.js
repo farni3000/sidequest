@@ -6,18 +6,18 @@
   var currentChart = null;
 
   var CATEGORY_COLORS = {
-    viewpoint: "#38bdf8",
-    peak: "#a78bfa",
-    lake: "#60a5fa",
-    historic: "#fbbf24",
-    mountain_pass: "#fb7185",
-    mtb_trail: "#4ade80",
-    mtb_route: "#4ade80",
-    attraction: "#f472b6",
-    picnic_site: "#a3e635",
-    park: "#34d399",
-    track: "#facc15",
-    poi: "#94a3b8",
+    viewpoint: "#2b8fb8",
+    peak: "#7c5bc7",
+    lake: "#2f7fc9",
+    historic: "#b97a12",
+    mountain_pass: "#d24d63",
+    mtb_trail: "#3d8f2e",
+    mtb_route: "#3d8f2e",
+    attraction: "#c94f8d",
+    picnic_site: "#7b9a14",
+    park: "#1f8f68",
+    track: "#a98606",
+    poi: "#5f7268",
   };
 
   function colorFor(category) {
@@ -94,33 +94,27 @@
     });
 
     L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
       {
         maxZoom: 19,
         attribution:
-          'Tiles &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> — Esri, DeLorme, NAVTEQ',
+          'Tiles &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> — Esri, HERE, Garmin, USGS',
       }
     ).addTo(map);
 
-    // Labels sit on a separate Esri layer; omit its attribution to avoid duplicates.
-    L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 19, attribution: "" }
-    ).addTo(map);
-
-    // Soft glow underneath the crisp route line.
+    // Dark casing keeps the lime route legible on the light topo map.
     L.polyline(coords, {
-      color: "#c8f560",
-      weight: 16,
-      opacity: 0.16,
+      color: "#10301a",
+      weight: 9,
+      opacity: 0.45,
       lineCap: "round",
       lineJoin: "round",
     }).addTo(map);
 
     var line = L.polyline(coords, {
-      color: "#d9fb7a",
-      weight: 4.2,
-      opacity: 0.95,
+      color: "#a8e63c",
+      weight: 4.4,
+      opacity: 1,
       lineCap: "round",
       lineJoin: "round",
     }).addTo(map);
@@ -167,13 +161,20 @@
       );
     });
 
-    map.fitBounds(line.getBounds(), { padding: [30, 30] });
+    var routeBounds = line.getBounds();
     currentMap = map;
 
-    // The map lives inside freshly swapped HTMX content – recalculate its size.
-    requestAnimationFrame(function () {
-      if (currentMap === map) map.invalidateSize();
-    });
+    // The map lives inside freshly swapped HTMX content. Fit only after the
+    // browser has measured the new layout, otherwise Leaflet keeps a zero-size
+    // view and zooms into the very first coordinate.
+    function fitRoute() {
+      if (currentMap !== map) return;
+      map.invalidateSize();
+      map.fitBounds(routeBounds, { padding: [30, 30] });
+    }
+
+    requestAnimationFrame(fitRoute);
+    setTimeout(fitRoute, 180);
   }
 
   function renderChart(plan) {
@@ -206,9 +207,9 @@
     var ctx = canvas.getContext("2d");
     var height = (canvas.parentElement && canvas.parentElement.clientHeight) || 200;
     var fill = ctx.createLinearGradient(0, 0, 0, height);
-    fill.addColorStop(0, "rgba(200, 245, 96, 0.42)");
-    fill.addColorStop(0.55, "rgba(52, 211, 153, 0.14)");
-    fill.addColorStop(1, "rgba(52, 211, 153, 0)");
+    fill.addColorStop(0, "rgba(205, 245, 111, 0.4)");
+    fill.addColorStop(0.55, "rgba(91, 220, 171, 0.13)");
+    fill.addColorStop(1, "rgba(91, 220, 171, 0)");
 
     currentChart = new Chart(ctx, {
       type: "line",
@@ -218,13 +219,13 @@
           {
             label: "Höhe (m)",
             data: data,
-            borderColor: "#c8f560",
+            borderColor: "#cdf56f",
             backgroundColor: fill,
             borderWidth: 2.8,
             pointRadius: 0,
             pointHoverRadius: 4,
-            pointHoverBackgroundColor: "#eaffc0",
-            pointHoverBorderColor: "#08110c",
+            pointHoverBackgroundColor: "#ecffc0",
+            pointHoverBorderColor: "#0b140f",
             pointHoverBorderWidth: 2,
             fill: true,
             tension: 0.28,
@@ -240,7 +241,7 @@
           x: {
             border: { display: false },
             ticks: {
-              color: "#7f968c",
+              color: "#8aa393",
               font: { size: 10 },
               maxTicksLimit: 8,
               maxRotation: 0,
@@ -250,24 +251,24 @@
           y: {
             border: { display: false },
             ticks: {
-              color: "#7f968c",
+              color: "#8aa393",
               font: { size: 10 },
               maxTicksLimit: 5,
               callback: function (value) {
                 return value + " m";
               },
             },
-            grid: { color: "rgba(255, 255, 255, 0.055)" },
+            grid: { color: "rgba(238, 243, 231, 0.06)" },
           },
         },
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: "rgba(10, 15, 13, 0.94)",
-            borderColor: "rgba(255, 255, 255, 0.12)",
+            backgroundColor: "rgba(16, 26, 20, 0.96)",
+            borderColor: "rgba(238, 243, 231, 0.13)",
             borderWidth: 1,
-            titleColor: "#91a79d",
-            bodyColor: "#eaffc0",
+            titleColor: "#a4b7a9",
+            bodyColor: "#dcff8c",
             bodyFont: { family: "Inter", size: 12, weight: "600" },
             titleFont: { family: "Inter", size: 10 },
             padding: 10,
@@ -295,6 +296,15 @@
   document.body.addEventListener("htmx:afterSwap", function (event) {
     var target = event.detail.target;
     var holder = target ? target.querySelector("#plan-data") : null;
+
+    if (target && target.id === "result") {
+      var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+
     if (!holder) return;
     try {
       renderPlan(JSON.parse(holder.textContent));

@@ -1,147 +1,288 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div x-data="{ roundTrip: false, bike: 'road' }" class="space-y-8">
-  <!-- Hero -->
-  <section class="reveal max-w-2xl">
-    <p class="eyebrow">Dein nächster Sidequest</p>
-    <h1
-      class="mt-3 font-display text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.4rem]"
-    >
-      Routen, die man<br />
-      <span class="text-gradient">erinnert.</span>
-    </h1>
-    <p class="mt-4 max-w-xl text-sm leading-relaxed text-sage sm:text-base">
-      Beschreibe, was du fahren willst – die KI findet Aussichtspunkte, Pässe und
-      Trails entlang deiner Strecke und baut sie in die Route ein.
-    </p>
+<div
+  x-data="{
+    bike: 'road',
+    routeMode: 'false',
+    distance: 60,
+    heat: 50,
+    wishes: '',
+    suggestions: [
+      'ruhig',
+      'kurvig',
+      'aussichtsreich',
+      'entspannt',
+      'an Seen vorbei',
+      'durch den Wald',
+      'über Pässe',
+      'Trails',
+      'Einkehr',
+      'wenig Verkehr'
+    ],
+    wishParts() {
+      return this.wishes
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    },
+    hasWish(wish) {
+      return this.wishParts().includes(wish);
+    },
+    toggleWish(wish) {
+      const parts = this.wishParts();
+      const index = parts.indexOf(wish);
+      if (index >= 0) {
+        parts.splice(index, 1);
+      } else {
+        parts.push(wish);
+      }
+      this.wishes = parts.join(', ');
+    }
+  }"
+  class="space-y-6"
+>
+  <!-- Page intro -->
+  <section class="page-intro reveal">
+    <p class="eyebrow">Route entwerfen</p>
+    <div class="page-intro-row">
+      <h1 class="page-title">Was fährst du heute?</h1>
+      <p class="page-lead">
+        Wähle Rad, Streckenart und Feintuning. Die KI findet echte Highlights
+        entlang deiner Route und baut sie ein.
+      </p>
+    </div>
   </section>
 
-  <!-- Workbench: form rail + results pane -->
-  <div class="workbench reveal reveal-delay-1">
-    <aside class="form-rail">
-      <div class="mb-6">
-        <p class="eyebrow">Route entwerfen</p>
-        <h2 class="mt-2 font-display text-2xl font-semibold tracking-tight">
-          Deine Wunschtour
-        </h2>
-        <p class="mt-1.5 text-sm text-sage">
-          Beschreibe die Route – den Rest übernimmt die KI.
-        </p>
+  <!-- Configurator -->
+  <section class="config-shell reveal reveal-delay-1" aria-labelledby="config-title">
+    <form
+      hx-post="/plan"
+      hx-target="#result"
+      hx-swap="innerHTML"
+      hx-indicator="#spinner"
+      hx-disabled-elt="#plan-submit"
+      class="config-form"
+    >
+      <div class="config-heading">
+        <div>
+          <p class="eyebrow">Deine Wunschtour</p>
+          <h2 id="config-title" class="config-title">Route zusammenstellen</h2>
+        </div>
+        <p class="config-hint">Direkt anklicken – kein Dropdown nötig.</p>
       </div>
 
-      <form
-        hx-post="/plan"
-        hx-target="#result"
-        hx-swap="innerHTML"
-        hx-indicator="#spinner"
-        hx-disabled-elt="#plan-submit"
-      >
-        <!-- 01 · Rad & Strecke -->
-        <div class="form-section">
-          <div class="form-section-head">
-            <span class="form-step">01</span>
-            Rad &amp; Strecke
+      <!-- 01 · Rad & Strecke -->
+      <div class="form-section">
+        <div class="form-section-head">
+          <span class="form-step">01</span>
+          <span>Rad &amp; Strecke</span>
+        </div>
+
+        <fieldset class="control-group">
+          <legend class="field-label">Fahrradart</legend>
+          <div class="bike-grid">
+            {% for option in bike_options %}
+            <label class="choice-card">
+              <input
+                type="radio"
+                name="bike_type"
+                value="{{ option.value }}"
+                x-model="bike"
+                class="sr-only"
+                {% if loop.first %}checked{% endif %}
+              />
+              <span class="choice-card-face">
+                <span class="choice-icon" aria-hidden="true">
+                  {% if option.value == 'road' %}
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <circle cx="5.5" cy="17" r="3" stroke="currentColor" stroke-width="1.7" />
+                    <circle cx="18.5" cy="17" r="3" stroke="currentColor" stroke-width="1.7" />
+                    <path
+                      d="M5.5 17l4-7h5.5l3.5 7M9.5 10h5M12 10l2.5 7M14.5 10l-2 7"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  {% elif option.value == 'gravel' %}
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <path
+                      d="M3 8.5c3-3 6 3 9 0s6 3 9 0M3 15.5c3-3 6 3 9 0s6 3 9 0"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  {% elif option.value == 'mtb' %}
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <path
+                      d="m3 19 6-9 4 5.5L16 12l5 7H3Z"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  {% else %}
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <circle cx="5.5" cy="17" r="3" stroke="currentColor" stroke-width="1.7" />
+                    <circle cx="18.5" cy="17" r="3" stroke="currentColor" stroke-width="1.7" />
+                    <path
+                      d="M5.5 17l4-7h5.5l3.5 7M9.5 10h5M12 10l2.5 7M14.5 10l-2 7M7.5 6h4v4"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  {% endif %}
+                </span>
+                <span class="choice-copy">
+                  <span class="choice-title">{{ option.label }}</span>
+                  <span class="choice-meta">
+                    {% if option.value == 'road' %}Tempo auf Asphalt
+                    {% elif option.value == 'gravel' %}Schotter &amp; Waldwege
+                    {% elif option.value == 'mtb' %}Trails &amp; Gebirge
+                    {% else %}Komfort &amp; Genuss
+                    {% endif %}
+                  </span>
+                </span>
+                <span class="choice-check" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5">
+                    <path
+                      d="m5 12 4 4 10-10"
+                      stroke="currentColor"
+                      stroke-width="2.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="mtb-block" x-show="bike === 'mtb'" x-cloak>
+          <span class="field-label">MTB-Härtegrad</span>
+          <div class="segment-row" role="radiogroup" aria-label="MTB-Härtegrad">
+            {% for option in mtb_options %}
+            <label class="mini-choice">
+              <input
+                type="radio"
+                name="mtb_difficulty"
+                value="{{ option.value }}"
+                class="sr-only"
+                :disabled="bike !== 'mtb'"
+                {% if loop.first %}checked{% endif %}
+              />
+              <span class="mini-choice-face">
+                <span class="mini-choice-dot" aria-hidden="true"></span>
+                {{ option.label }}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="route-block">
+          <span class="field-label">Streckenart</span>
+          <div class="route-modes" role="radiogroup" aria-label="Streckenart">
+            <label class="mode-card">
+              <input
+                type="radio"
+                name="round_trip"
+                value="false"
+                x-model="routeMode"
+                class="sr-only"
+                checked
+              />
+              <span class="mode-card-face">
+                <span class="mode-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <path
+                      d="M5 12h13m0 0-4-4m4 4-4 4"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="mode-copy">
+                  <span class="mode-title">Start → Ziel</span>
+                  <span class="mode-meta">Ein Weg zu einem neuen Ort</span>
+                </span>
+                <span class="mode-check" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5">
+                    <path
+                      d="m5 12 4 4 10-10"
+                      stroke="currentColor"
+                      stroke-width="2.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+              </span>
+            </label>
+
+            <label class="mode-card">
+              <input
+                type="radio"
+                name="round_trip"
+                value="true"
+                x-model="routeMode"
+                class="sr-only"
+              />
+              <span class="mode-card-face">
+                <span class="mode-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+                    <path
+                      d="M4 9a8 8 0 0 1 13.7-5.7L20 5.5M20 15a8 8 0 0 1-13.7 5.7L4 18.5"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M20 2v4h-4M4 22v-4h4"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="mode-copy">
+                  <span class="mode-title">Rundtour ab Start</span>
+                  <span class="mode-meta">Zurück zum Startpunkt</span>
+                </span>
+                <span class="mode-check" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5">
+                    <path
+                      d="m5 12 4 4 10-10"
+                      stroke="currentColor"
+                      stroke-width="2.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+              </span>
+            </label>
           </div>
 
-          <div class="space-y-4">
-            <div>
-              <span class="field-label">Fahrradart</span>
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
-                {% for option in bike_options %}
-                <label class="bike-pill">
-                  <input
-                    type="radio"
-                    name="bike_type"
-                    value="{{ option.value }}"
-                    x-model="bike"
-                    class="peer sr-only"
-                    {% if loop.first %}checked{% endif %}
-                  />
-                  <span class="bike-pill-face">
-                    <span class="bike-pill-icon" aria-hidden="true">
-                      {% if option.value == 'road' %}
-                      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6">
-                        <path
-                          d="M12 13.5 16 9"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                        />
-                        <path
-                          d="M4.5 17a8 8 0 1 1 15 0"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                        />
-                        <path
-                          d="M12 17v2"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                        />
-                      </svg>
-                      {% elif option.value == 'gravel' %}
-                      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6">
-                        <path
-                          d="M3 8.5c3-3 6 3 9 0s6 3 9 0M3 15.5c3-3 6 3 9 0s6 3 9 0"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                        />
-                      </svg>
-                      {% elif option.value == 'mtb' %}
-                      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6">
-                        <path
-                          d="m3 19 6-9 4 5.5L16 12l5 7H3Z"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linejoin="round"
-                        />
-                      </svg>
-                      {% else %}
-                      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6">
-                        <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" />
-                        <path
-                          d="m15 9-2 4-4 2 2-4 4-2Z"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linejoin="round"
-                        />
-                      </svg>
-                      {% endif %}
-                    </span>
-                    <span>{{ option.label }}</span>
-                  </span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div x-show="bike === 'mtb'" x-cloak>
-              <label class="field-label" for="mtb_difficulty">MTB-Härtegrad</label>
-              <div class="relative">
-                <select id="mtb_difficulty" name="mtb_difficulty" class="input">
-                  {% for option in mtb_options %}
-                  <option value="{{ option.value }}">{{ option.label }}</option>
-                  {% endfor %}
-                </select>
-                <svg class="select-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="m6 9 6 6 6-6"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </div>
-            </div>
-
-            <div>
+          <div
+            class="location-grid"
+            :class="routeMode === 'true' ? 'is-single' : ''"
+          >
+            <div class="field-block">
               <label class="field-label" for="start">Start</label>
-              <div class="relative">
-                <span class="input-icon">
+              <div class="input-shell">
+                <span class="input-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
                     <path
                       d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10Z"
@@ -157,16 +298,16 @@
                   name="start"
                   required
                   placeholder="Adresse oder 50.85,4.35"
-                  class="input pl-10"
+                  class="input"
                   autocomplete="off"
                 />
               </div>
             </div>
 
-            <div x-show="!roundTrip" x-cloak>
+            <div class="field-block" x-show="routeMode === 'false'" x-cloak>
               <label class="field-label" for="end">Ziel</label>
-              <div class="relative">
-                <span class="input-icon">
+              <div class="input-shell">
+                <span class="input-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
                     <path
                       d="M6 21V4m0 0h10.5l-2 3.5 2 3.5H6"
@@ -181,261 +322,182 @@
                   id="end"
                   name="end"
                   placeholder="Adresse oder Koordinaten"
-                  class="input pl-10"
+                  class="input"
                   autocomplete="off"
                 />
               </div>
             </div>
+          </div>
 
-            <label class="toggle-row">
-              <span class="flex items-center gap-2.5 text-sm font-medium text-foam">
-                <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
+          <p class="roundtrip-note" x-show="routeMode === 'true'" x-cloak>
+            <span class="note-dot" aria-hidden="true"></span>
+            Startpunkt = Zielpunkt. Die Route führt dich im Kreis zurück.
+          </p>
+        </div>
+      </div>
+
+      <!-- 02 · Feintuning -->
+      <div class="form-section">
+        <div class="form-section-head">
+          <span class="form-step">02</span>
+          <span>Feintuning</span>
+        </div>
+
+        <div class="slider-grid">
+          <div class="slider-card">
+            <div class="slider-head">
+              <span class="slider-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
                   <path
-                    d="M4 9a8 8 0 0 1 13.7-5.7L20 5.5M20 15a8 8 0 0 1-13.7 5.7L4 18.5"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                  <path
-                    d="M20 2v4h-4M4 22v-4h4"
+                    d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"
                     stroke="currentColor"
                     stroke-width="1.7"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   />
                 </svg>
-                Rundtour ab Startpunkt
               </span>
-              <span class="relative flex flex-none">
-                <input
-                  id="round_trip"
-                  name="round_trip"
-                  type="checkbox"
-                  x-model="roundTrip"
-                  class="peer sr-only"
-                />
-                <span class="toggle-track" aria-hidden="true"></span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 02 · Feintuning -->
-        <div class="form-section">
-          <div class="form-section-head">
-            <span class="form-step">02</span>
-            Feintuning
-          </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="field-label" for="distance_km">
-                Distanz
-                <span class="font-normal normal-case tracking-normal text-sage/60" x-show="!roundTrip">
-                  – optional
-                </span>
-              </label>
-              <div class="relative">
-                <input
-                  id="distance_km"
-                  name="distance_km"
-                  type="number"
-                  min="1"
-                  step="1"
-                  placeholder="z. B. 45"
-                  class="input pr-12"
-                  inputmode="numeric"
-                />
-                <span
-                  class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-sage"
-                  >km</span
-                >
+              <div class="slider-copy">
+                <label class="slider-title" for="distance_km">Distanz</label>
+                <p class="slider-note">Ungefähre Länge deiner Tour</p>
               </div>
+              <output class="slider-value" for="distance_km">
+                <span x-text="distance"></span> km
+              </output>
             </div>
-
-            <div class="heat-panel" x-data="{ heat: 50 }">
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5">
-                  <span class="heat-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
-                      <path
-                        d="M12 3c1.5 3-1.5 4.2-1.5 6.5A3.5 3.5 0 0 0 12 13a3 3 0 0 0 3-3c2 1.6 3 3.6 3 5.8A6 6 0 1 1 6 15.8C6 11 12 8.5 12 3Z"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <div>
-                    <div class="text-sm font-medium text-foam">Heat</div>
-                    <p class="text-xs leading-snug text-sage">
-                      Umwege für Highlights
-                    </p>
-                  </div>
-                </div>
-                <span class="heat-badge" x-text="heat"></span>
-              </div>
-              <input
-                id="heat"
-                name="heat"
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                x-model.number="heat"
-                :style="'--heat: ' + heat + '%'"
-                class="range mt-4"
-                aria-label="Heat – Umwege für Highlights"
-              />
-              <div class="mt-2.5 flex justify-between text-[10px] uppercase tracking-[0.12em] text-sage/60">
-                <span>Kürzeste Route</span>
-                <span>Max. Highlights</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 03 · Wünsche -->
-        <div class="form-section">
-          <div class="form-section-head">
-            <span class="form-step">03</span>
-            Wünsche
-          </div>
-          <textarea
-            id="freetext"
-            name="freetext"
-            rows="3"
-            placeholder="z. B. gerne an einem See vorbei, keine viel befahrenen Straßen …"
-            class="input resize-none leading-relaxed"
-          ></textarea>
-        </div>
-
-        <!-- Submit -->
-        <div class="space-y-3 pt-6">
-          <button
-            id="plan-submit"
-            type="submit"
-            class="btn-primary group w-full disabled:cursor-progress disabled:opacity-60"
-          >
-            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4">
-              <path
-                d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span>Route planen</span>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              class="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
-            >
-              <path
-                d="M5 12h14m0 0-5-5m5 5-5 5"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <div id="spinner" class="htmx-indicator loading-pill">
-            <span class="loading-dot"></span>
-            Routing · POIs · KI-Auswahl
-          </div>
-          <p class="text-center text-[11px] text-sage/60">
-            Dauer je nach Strecke ca. 10–30 Sekunden.
-          </p>
-        </div>
-      </form>
-    </aside>
-
-    <section id="result" class="results-pane">
-      <!-- Empty state -->
-      <div class="empty-state">
-        <div class="empty-glow" aria-hidden="true"></div>
-        <div class="relative z-10 w-full">
-          <svg
-            class="empty-route mx-auto h-24 w-64 text-lime-300"
-            viewBox="0 0 288 112"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M10 90c34 0 40-52 78-52s56 44 92 44 48-36 96-46"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-dasharray="7 10"
+            <input
+              id="distance_km"
+              name="distance_km"
+              type="range"
+              min="10"
+              max="200"
+              step="5"
+              x-model.number="distance"
+              :style="'--fill: ' + ((distance - 10) / 190 * 100) + '%'"
+              class="range"
             />
-            <circle cx="10" cy="90" r="5" fill="#c8f560" />
-            <circle cx="276" cy="36" r="5" fill="#34d399" />
-            <circle cx="88" cy="38" r="3.5" fill="#38bdf8" />
-            <circle cx="180" cy="82" r="3.5" fill="#f472b6" />
-          </svg>
-          <h3 class="mt-5 font-display text-xl font-semibold">Deine Route wartet</h3>
-          <p class="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-sage">
-            Fülle das Formular aus – Karte, Höhenprofil und deine Highlights
-            erscheinen genau hier.
-          </p>
+            <div class="range-labels">
+              <span>10 km</span>
+              <span>200 km</span>
+            </div>
+          </div>
 
-          <div class="mt-8 grid gap-2.5 sm:grid-cols-3">
-            <div class="preview-tile">
-              <span class="section-icon" aria-hidden="true">
+          <div class="slider-card">
+            <div class="slider-head">
+              <span class="slider-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
                   <path
-                    d="m9 4-5 2v14l5-2m0-14 6 2m-6-2v14m6-12 5-2v14l-5 2m0-14v14m-6 0 6-2"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </span>
-              <h4 class="mt-3 font-display text-sm font-semibold">Karte &amp; Verlauf</h4>
-              <p class="mt-1 text-xs leading-relaxed text-sage">
-                Deine Strecke auf dunkler Karte – inklusive Start, Ziel und Stopps.
-              </p>
-            </div>
-            <div class="preview-tile">
-              <span class="section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
-                  <path
-                    d="M4 19V5m0 14h16M7 15l4-5 3 3 4-6"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </span>
-              <h4 class="mt-3 font-display text-sm font-semibold">Höhenprofil</h4>
-              <p class="mt-1 text-xs leading-relaxed text-sage">
-                Anstiege und Abfahrten auf einen Blick, damit du weißt, was kommt.
-              </p>
-            </div>
-            <div class="preview-tile">
-              <span class="section-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
-                  <path
-                    d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
+                    d="M12 3c1.5 3-1.5 4.2-1.5 6.5A3.5 3.5 0 0 0 12 13a3 3 0 0 0 3-3c2 1.6 3 3.6 3 5.8A6 6 0 1 1 6 15.8C6 11 12 8.5 12 3Z"
                     stroke="currentColor"
                     stroke-width="1.6"
                     stroke-linejoin="round"
                   />
                 </svg>
               </span>
-              <h4 class="mt-3 font-display text-sm font-semibold">Echte Highlights</h4>
-              <p class="mt-1 text-xs leading-relaxed text-sage">
-                Aussichtspunkte, Seen und Trails – mit Begründung und Umweg-Angabe.
-              </p>
+              <div class="slider-copy">
+                <label class="slider-title" for="heat">Heat</label>
+                <p class="slider-note">Mehr Umwege zu Highlights</p>
+              </div>
+              <output class="slider-value" for="heat">
+                <span x-text="heat"></span>
+              </output>
+            </div>
+            <input
+              id="heat"
+              name="heat"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              x-model.number="heat"
+              :style="'--fill: ' + heat + '%'"
+              class="range"
+            />
+            <div class="range-labels">
+              <span>Direkt</span>
+              <span>Viele Highlights</span>
             </div>
           </div>
         </div>
       </div>
-    </section>
-  </div>
+
+      <!-- 03 · Wünsche -->
+      <div class="form-section">
+        <div class="form-section-head">
+          <span class="form-step">03</span>
+          <span>Wünsche</span>
+        </div>
+
+        <div class="wish-panel">
+          <label class="field-label" for="freetext">Was ist dir wichtig?</label>
+          <textarea
+            id="freetext"
+            name="freetext"
+            rows="4"
+            x-model="wishes"
+            placeholder="z. B. gerne an einem See vorbei, keine viel befahrenen Straßen …"
+            class="input wish-input"
+          ></textarea>
+
+          <div class="wish-suggestions" role="group" aria-label="Wunsch-Vorschläge">
+            <span class="wish-label">Schnell ergänzen</span>
+            <template x-for="wish in suggestions" :key="wish">
+              <button
+                type="button"
+                class="wish-chip"
+                :class="{ 'is-active': hasWish(wish) }"
+                :aria-pressed="hasWish(wish) ? 'true' : 'false'"
+                @click="toggleWish(wish)"
+              >
+                <span class="wish-symbol" aria-hidden="true" x-text="hasWish(wish) ? '−' : '+'"></span>
+                <span x-text="wish"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-zone">
+        <button
+          id="plan-submit"
+          type="submit"
+          class="btn-primary btn-hero disabled:cursor-progress disabled:opacity-60"
+        >
+          <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+            <path
+              d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>Route planen</span>
+          <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+            <path
+              d="M5 12h14m0 0-5-5m5 5-5 5"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <div class="submit-meta">
+          <span class="submit-dot" aria-hidden="true"></span>
+          <span>ca. 10–30 Sekunden</span>
+          <span class="submit-divider" aria-hidden="true">·</span>
+          <span>Karte, Höhenprofil &amp; GPX</span>
+        </div>
+        <div id="spinner" class="htmx-indicator loading-pill">
+          <span class="loading-dot"></span>
+          Routing · POIs · KI-Auswahl
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <!-- Results appear here after planning -->
+  <section id="result" class="result-region" aria-live="polite"></section>
 </div>
 {% endblock %}

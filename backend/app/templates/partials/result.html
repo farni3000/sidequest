@@ -15,8 +15,13 @@
             <span class="mx-1 inline-block text-lime-300">→</span> {{ plan.end_label }}
             {% endif %}
           </h2>
+          {% set mtb_labels = {
+            "xc": "Cross Country (XC)",
+            "all_mountain": "All Mountain",
+            "enduro": "Enduro"
+          } %}
           <p class="mt-2 text-sm text-sage">
-            {{ plan.bike_type_label }}{% if plan.mtb_difficulty %} · {{ plan.mtb_difficulty }}{% endif %}
+            {{ plan.bike_type_label }}{% if plan.mtb_difficulty %} · {{ mtb_labels.get(plan.mtb_difficulty, plan.mtb_difficulty) }}{% endif %}
             · Heat {{ plan.heat }}{% if plan.round_trip %} · Rundtour{% endif %}
           </p>
         </div>
@@ -76,7 +81,7 @@
 
         <div class="stat-tile" style="--tile-glow: rgba(52, 211, 153, 0.22)">
           <div class="stat-label">
-            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-emerald-300">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
               <path
                 d="M4 17 10 9l4 4 6-8m0 0h-4m4 0v4"
                 stroke="currentColor"
@@ -94,7 +99,7 @@
 
         <div class="stat-tile" style="--tile-glow: rgba(56, 189, 248, 0.2)">
           <div class="stat-label">
-            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-sky-300">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
               <path
                 d="M4 7 10 15l4-4 6 8m0 0h-4m4 0v-4"
                 stroke="currentColor"
@@ -112,7 +117,7 @@
 
         <div class="stat-tile" style="--tile-glow: rgba(244, 114, 182, 0.18)">
           <div class="stat-label">
-            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-pink-300">
+            <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4 text-lime-300">
               <path
                 d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
                 stroke="currentColor"
@@ -242,7 +247,7 @@
           <span class="timeline-node">{{ highlight.order_index }}</span>
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-medium text-foam">{{ highlight.name }}</span>
-            <span class="chip chip-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+            <span class="category-chip category-{{ highlight.category }}">
               {{ highlight.category }}
             </span>
           </div>
