@@ -9,6 +9,7 @@ services:
     environment:
       BROUTER_URL: http://brouter:17777
       DATABASE_URL: sqlite:////data/sidequest.db
+      ROUTE_REVIEW_DATA_DIR: /data/reviews
     volumes:
       - ./backend/app:/app/app
       - ./data:/data

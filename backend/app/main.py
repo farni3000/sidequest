@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -58,6 +61,82 @@ def _base_context(request: Request) -> dict:
     }
 
 
+def _render_template(name: str, request: Request, context: dict[str, Any]) -> str:
+    return templates.get_template(name).render({"request": request, **context})
+
+
+def _wants_stream(request: Request) -> bool:
+    return "application/x-ndjson" in request.headers.get("accept", "")
+
+
+def _ndjson(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+def _form_from_request(
+    bike_type: str,
+    mtb_difficulty: str | None,
+    start: str,
+    end: str | None,
+    round_trip: bool,
+    distance_km: float | None,
+    heat: int,
+    freetext: str | None,
+) -> PlanForm:
+    return PlanForm.model_validate(
+        {
+            "bike_type": bike_type,
+            "mtb_difficulty": mtb_difficulty,
+            "start": start,
+            "end": end,
+            "round_trip": round_trip,
+            "distance_km": distance_km,
+            "heat": heat,
+            "freetext": freetext,
+        }
+    )
+
+
+async def _plan_stream(request: Request, form: PlanForm) -> AsyncIterator[str]:
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+    async def emit(payload: dict[str, Any]) -> None:
+        await queue.put(payload)
+
+    async def runner() -> None:
+        try:
+            with Session(request.app.state.engine) as session:
+                plan = await create_plan(form, session, settings, on_event=emit)
+            html = _render_template("partials/result.html", request, {"plan": plan})
+            await queue.put({"type": "result", "html": html})
+        except (PlanError, GeocodingError) as exc:
+            html = _render_template("partials/error.html", request, {"error": str(exc)})
+            await queue.put({"type": "error", "html": html})
+        except Exception as exc:  # noqa: BLE001 - the UI needs a readable error
+            html = _render_template(
+                "partials/error.html",
+                request,
+                {"error": f"Unerwarteter Fehler bei der Routenplanung: {exc}"},
+            )
+            await queue.put({"type": "error", "html": html})
+
+    task = asyncio.create_task(runner())
+    try:
+        while True:
+            payload = await queue.get()
+            yield _ndjson(payload)
+            if payload.get("type") in ("result", "error"):
+                break
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def _single_event(payload: dict[str, Any]) -> AsyncIterator[str]:
+    yield _ndjson(payload)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -75,7 +154,6 @@ async def index(request: Request):
 @app.post("/plan", response_class=HTMLResponse)
 async def plan_route(
     request: Request,
-    session: Annotated[Session, Depends(get_session)],
     bike_type: str = Form(...),
     mtb_difficulty: str | None = Form(None),
     start: str = Form(...),
@@ -86,33 +164,38 @@ async def plan_route(
     freetext: str | None = Form(None),
 ):
     try:
-        form = PlanForm.model_validate(
-            {
-                "bike_type": bike_type,
-                "mtb_difficulty": mtb_difficulty,
-                "start": start,
-                "end": end,
-                "round_trip": round_trip,
-                "distance_km": distance_km,
-                "heat": heat,
-                "freetext": freetext,
-            }
+        form = _form_from_request(
+            bike_type, mtb_difficulty, start, end, round_trip, distance_km, heat, freetext
         )
     except ValidationError as exc:
+        html = _render_template("partials/error.html", request, {"error": str(exc)})
+        if _wants_stream(request):
+            return StreamingResponse(
+                _single_event({"type": "error", "html": html}),
+                media_type="application/x-ndjson",
+            )
         return templates.TemplateResponse(
             request=request,
             name="partials/error.html",
             context={"request": request, "error": str(exc)},
         )
 
-    try:
-        plan = await create_plan(form, session, settings)
-    except (PlanError, GeocodingError) as exc:
-        return templates.TemplateResponse(
-            request=request,
-            name="partials/error.html",
-            context={"request": request, "error": str(exc)},
+    if _wants_stream(request):
+        return StreamingResponse(
+            _plan_stream(request, form),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    with Session(request.app.state.engine) as session:
+        try:
+            plan = await create_plan(form, session, settings)
+        except (PlanError, GeocodingError) as exc:
+            return templates.TemplateResponse(
+                request=request,
+                name="partials/error.html",
+                context={"request": request, "error": str(exc)},
+            )
 
     return templates.TemplateResponse(
         request=request,

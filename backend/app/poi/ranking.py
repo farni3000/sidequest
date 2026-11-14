@@ -7,55 +7,20 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..ai.deepseek import complete_json
 from ..config import Settings
 from ..routing.base import BikeType, MtbDifficulty
 from .overpass import POI
 
-_TOOL_NAME = "select_highlights"
-
-_TOOL_SCHEMA: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": _TOOL_NAME,
-        "description": (
-            "Choose and order the most worthwhile POIs for a cycling route. "
-            "Respect the rider's preferences, the detour budget and the bike type."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "highlights": {
-                    "type": "array",
-                    "description": "Selected highlights in the order they should be visited.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "osm_id": {
-                                "type": "string",
-                                "description": "The POI id, exactly as provided.",
-                            },
-                            "order": {
-                                "type": "integer",
-                                "description": "Visit order, starting at 1.",
-                            },
-                            "rationale": {
-                                "type": "string",
-                                "description": "One short sentence (German) why this stop is worth it.",
-                            },
-                        },
-                        "required": ["osm_id", "order", "rationale"],
-                        "additionalProperties": False,
-                    },
-                },
-                "summary": {
-                    "type": "string",
-                    "description": "Optional one-sentence summary (German) of the route character.",
-                },
-            },
-            "required": ["highlights"],
-            "additionalProperties": False,
-        },
-    },
+_OUTPUT_SCHEMA = {
+    "highlights": [
+        {
+            "osm_id": "the POI id exactly as provided",
+            "order": 1,
+            "rationale": "one short German sentence why this stop is worth it",
+        }
+    ],
+    "summary": "optional one-sentence German summary of the route character",
 }
 
 
@@ -125,7 +90,9 @@ def _build_prompt(pois: list[POI], context: RankingContext) -> str:
     return (
         "Wähle für die folgende Radroute die lohnendsten Highlights aus und bringe sie "
         "in eine sinnvolle Besuchsreihenfolge. Beachte das Umweg-Budget und den Freitext. "
-        "Antworte ausschliesslich über den Tool-Aufruf.\n\n"
+        "Wähle nur POIs aus der Liste und erfinde keine IDs.\n\n"
+        "Antworte ausschließlich mit JSON in genau dieser Form:\n"
+        f"{json.dumps(_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)}\n\n"
         f"Rahmenbedingungen:\n{json.dumps(prefs, ensure_ascii=False, indent=2)}\n\n"
         f"Gefundene POIs:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
@@ -142,34 +109,24 @@ async def rank_pois(
         return _fallback(pois, context)
 
     try:
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=settings.deepseek_base_url,
-        )
-        response = await client.chat.completions.create(  # type: ignore[call-overload]
-            model=settings.deepseek_model,
-            messages=[
+        completion = await complete_json(
+            settings,
+            [
                 {
                     "role": "system",
                     "content": (
                         "Du bist ein erfahrener Radtouren-Planer. Wähle nur Highlights, "
-                        "die den Wünschen entsprechen und das Umweg-Budget einhalten."
+                        "die den Wünschen entsprechen und das Umweg-Budget einhalten. "
+                        "Antworte ausschließlich mit JSON."
                     ),
                 },
                 {"role": "user", "content": _build_prompt(pois, context)},
             ],
-            tools=[_TOOL_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": _TOOL_NAME}},
-            temperature=0.3,
+            require_image=False,
+            temperature=0.2,
+            timeout_s=settings.deepseek_timeout_s,
         )
-        message = response.choices[0].message
-        if not message.tool_calls:
-            return _fallback(pois, context)
-
-        arguments = json.loads(message.tool_calls[0].function.arguments)
-        return _parse_arguments(arguments, pois, context)
+        return _parse_arguments(completion.data, pois, context)
     except Exception:  # noqa: BLE001 - AI must never break planning
         return _fallback(pois, context)
 

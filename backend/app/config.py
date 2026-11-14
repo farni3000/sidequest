@@ -23,7 +23,23 @@ class Settings(BaseSettings):
     # AI / deepseek (OpenAI-compatible)
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
+    # Fallbacks only: the best currently available model is discovered from /models.
     deepseek_model: str = "deepseek-chat"
+    deepseek_vision_model: str | None = None
+    deepseek_effort: str | None = None
+    deepseek_model_cache_ttl_s: int = 3600
+    deepseek_timeout_s: float = 180.0
+
+    # Automatic route review (vision model + optional correction rounds)
+    route_review_enabled: bool = True
+    route_review_max_rounds: int = 3
+    route_review_image_width: int = 1200
+    route_review_image_height: int = 900
+    route_review_timeout_s: float = 180.0
+    route_review_max_free_waypoints: int = 2
+    route_review_max_free_waypoint_offset_km: float = 25.0
+    route_review_save_images: bool = False
+    route_review_data_dir: str = "./data/reviews"
 
     # Routing providers
     ors_api_key: str | None = None

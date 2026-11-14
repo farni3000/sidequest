@@ -31,13 +31,13 @@ def roundtrip_radius_km(distance_km: float | None, heat: int) -> float:
 
 
 def loop_waypoints(
-    center: tuple[float, float], radius_km: float, count: int = 3
+    center: tuple[float, float], radius_km: float, count: int = 3, rotation_deg: float = 0.0
 ) -> list[tuple[float, float]]:
     """Evenly spaced points around ``center`` to force a loop without highlights."""
     from .geo import offset_point
 
     count = max(2, count)
     return [
-        offset_point(center, bearing, radius_km)
-        for bearing in (360.0 * i / count for i in range(count))
+        offset_point(center, rotation_deg + 360.0 * i / count, radius_km)
+        for i in range(count)
     ]

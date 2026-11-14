@@ -1558,6 +1558,151 @@ body {
   display: none !important;
 }
 
+/* --------------------------------------------------------------------------
+ * Route review: live status log + final assessment
+ * ----------------------------------------------------------------------- */
+.review-log-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1.35rem 1.35rem;
+}
+
+.review-log-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: #a4b7a9;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.review-log-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: #5f7268;
+}
+
+.review-log-status .review-log-dot {
+  background: #8aa393;
+}
+
+.review-log-ok .review-log-dot {
+  background: #cdf56f;
+  box-shadow: 0 0 10px rgba(205, 245, 111, 0.65);
+}
+
+.review-log-warn .review-log-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+.review-log-revision .review-log-dot {
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+}
+
+.review-log-issue {
+  padding-left: 1.3rem;
+  color: #d9c99a;
+  font-size: 0.75rem;
+}
+
+.review-log-issue .review-log-dot {
+  display: none;
+}
+
+.review-summary {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(205, 245, 111, 0.18);
+  border-radius: 0.9rem;
+  background: rgba(205, 245, 111, 0.055);
+}
+
+.review-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.review-metric {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(238, 243, 231, 0.1);
+  border-radius: 999px;
+  color: #a4b7a9;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.review-summary-text {
+  margin-top: 0.7rem;
+  color: rgba(238, 243, 231, 0.82);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.review-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  padding: 0;
+  list-style: none;
+  color: #d9c99a;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.review-issues li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.review-severity {
+  flex: none;
+  margin-top: 0.1rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.review-severity-high {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fda4af;
+}
+
+.review-severity-medium {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fcd34d;
+}
+
+.review-severity-low {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+.review-fix {
+  color: rgba(164, 183, 169, 0.9);
+}
+
+.review-model {
+  margin-top: 0.65rem;
+  color: rgba(164, 183, 169, 0.55);
+  font-size: 0.65rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

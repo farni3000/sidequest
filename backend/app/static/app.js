@@ -293,6 +293,222 @@
     renderChart(plan);
   }
 
+  /* ---------------------------------------------------------------------
+   * NDJSON progress stream: live review log, then the final HTML result.
+   * ------------------------------------------------------------------- */
+  var streaming = false;
+
+  function reviewLogHtml() {
+    return (
+      '<section class="panel review-log" aria-live="polite">' +
+      '<div class="panel-head">' +
+      '<div class="flex items-center gap-3">' +
+      '<span class="section-icon" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">' +
+      '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" ' +
+      'stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />' +
+      "</svg></span>" +
+      "<div><h3 class=\"font-display text-base font-semibold\">Streckenprüfung</h3>" +
+      '<p class="text-xs text-sage">Status, Review und Korrekturen</p></div>' +
+      "</div>" +
+      '<span class="chip chip-lime">läuft …</span>' +
+      "</div>" +
+      '<div class="review-log-lines" id="review-log-lines"></div>' +
+      "</section>"
+    );
+  }
+
+  function ensureReviewLog() {
+    var result = document.getElementById("result");
+    if (!result) return null;
+    result.innerHTML = reviewLogHtml();
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    result.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "start",
+    });
+    return document.getElementById("review-log-lines");
+  }
+
+  function appendReviewLog(kind, text) {
+    var lines = document.getElementById("review-log-lines");
+    if (!lines || !text) return;
+    var line = document.createElement("div");
+    line.className = "review-log-line review-log-" + kind;
+    var dot = document.createElement("span");
+    dot.className = "review-log-dot";
+    dot.setAttribute("aria-hidden", "true");
+    var message = document.createElement("span");
+    message.textContent = text;
+    line.appendChild(dot);
+    line.appendChild(message);
+    lines.appendChild(line);
+  }
+
+  function reviewEventText(event) {
+    var parts = [
+      "Review " + event.round + ": " + event.score + "/100",
+      "Unsicherheit " + Math.round((event.uncertainty || 0) * 100) + " %",
+    ];
+    parts.push(event.accepted ? "passt" : "Korrektur nötig");
+    return parts.join(" · ");
+  }
+
+  function errorPanel(message) {
+    return (
+      '<section class="panel"><div class="p-5 sm:p-6">' +
+      '<p class="eyebrow">Fehler</p>' +
+      '<h2 class="mt-2 font-display text-xl font-semibold">Route konnte nicht geladen werden</h2>' +
+      '<p class="mt-2 text-sm leading-relaxed text-sage">' +
+      escapeHtml(message) +
+      "</p></div></section>"
+    );
+  }
+
+  function finishStream(html) {
+    var result = document.getElementById("result");
+    if (result && html) {
+      result.innerHTML = html;
+      // Re-use the existing htmx hook so Leaflet/Chart.js render the result.
+      result.dispatchEvent(
+        new CustomEvent("htmx:afterSwap", {
+          bubbles: true,
+          detail: { target: result, elt: result },
+        })
+      );
+    }
+    cleanupStream();
+  }
+
+  function cleanupStream() {
+    streaming = false;
+    var button = document.getElementById("plan-submit");
+    if (button) button.disabled = false;
+    var form = document.querySelector('form[hx-post="/plan"]');
+    if (form) form.removeAttribute("aria-busy");
+  }
+
+  function handleStreamEvent(event, state) {
+    if (!event || !event.type) return;
+    if (event.type === "status") {
+      appendReviewLog("status", event.message);
+    } else if (event.type === "review") {
+      appendReviewLog(event.accepted ? "ok" : "warn", reviewEventText(event));
+      var issues = (event.issues || [])
+        .slice(0, 3)
+        .map(function (issue) {
+          return issue.description;
+        })
+        .filter(Boolean);
+      if (issues.length) appendReviewLog("issue", issues.join(" · "));
+    } else if (event.type === "revision") {
+      appendReviewLog(
+        "revision",
+        "Korrektur: " + (event.message || "Route wird angepasst.") +
+          (event.reason ? " — " + event.reason : "")
+      );
+    } else if (event.type === "result" || event.type === "error") {
+      state.finished = true;
+      finishStream(event.html);
+    }
+  }
+
+  function streamPlan(form) {
+    if (streaming) return;
+    streaming = true;
+
+    var button = document.getElementById("plan-submit");
+    if (button) button.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    ensureReviewLog();
+    appendReviewLog("status", "Anfrage wird gesendet …");
+
+    var state = { finished: false };
+    var decoder = new TextDecoder();
+
+    fetch("/plan", {
+      method: "POST",
+      body: new FormData(form),
+      headers: { Accept: "application/x-ndjson" },
+      credentials: "same-origin",
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          return response.text().then(function (body) {
+            var message = "HTTP " + response.status;
+            try {
+              var parsed = JSON.parse(body);
+              if (parsed && parsed.detail) {
+                message =
+                  typeof parsed.detail === "string"
+                    ? parsed.detail
+                    : JSON.stringify(parsed.detail);
+              }
+            } catch (error) {
+              /* keep the HTTP status */
+            }
+            throw new Error(message);
+          });
+        }
+        var contentType = response.headers.get("content-type") || "";
+        if (contentType.indexOf("application/x-ndjson") === -1 || !response.body) {
+          return response.text().then(function (html) {
+            state.finished = true;
+            finishStream(html);
+          });
+        }
+
+        var reader = response.body.getReader();
+        var buffer = "";
+
+        function pump() {
+          return reader.read().then(function (chunk) {
+            if (chunk.done) {
+              if (!state.finished) {
+                finishStream(
+                  errorPanel("Der Prüf-Stream wurde ohne Ergebnis beendet.")
+                );
+              }
+              return;
+            }
+            buffer += decoder.decode(chunk.value, { stream: true });
+            var parts = buffer.split("\n");
+            buffer = parts.pop();
+            parts.forEach(function (line) {
+              if (!line.trim()) return;
+              try {
+                handleStreamEvent(JSON.parse(line), state);
+              } catch (error) {
+                console.error("Could not parse review event", error, line);
+              }
+            });
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (error) {
+        finishStream(
+          errorPanel("Die Routenplanung ist fehlgeschlagen: " + error.message)
+        );
+      });
+  }
+
+  if (window.fetch && window.ReadableStream && window.TextDecoder) {
+    var planForm = document.querySelector('form[hx-post="/plan"]');
+    if (planForm) {
+      planForm.addEventListener(
+        "submit",
+        function (event) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          streamPlan(planForm);
+        },
+        true
+      );
+    }
+  }
+
   document.body.addEventListener("htmx:afterSwap", function (event) {
     var target = event.detail.target;
     var holder = target ? target.querySelector("#plan-data") : null;

@@ -1,5 +1,5 @@
-from types import SimpleNamespace
-
+import app.poi.ranking as ranking_module
+from app.ai.deepseek import JsonCompletion
 from app.config import Settings
 from app.poi.overpass import POI
 from app.poi.ranking import (
@@ -57,25 +57,15 @@ async def test_rank_pois_calls_deepseek(monkeypatch) -> None:
         _env_file=None, deepseek_api_key="test-key", deepseek_base_url="https://ds.test"
     )
 
-    tool_call = SimpleNamespace(
-        function=SimpleNamespace(
-            arguments='{"highlights":[{"osm_id":"node/2","order":1,"rationale":"Gipfel!"}]}'
+    async def fake_complete(*args, **kwargs):
+        return JsonCompletion(
+            data={"highlights": [{"osm_id": "node/2", "order": 1, "rationale": "Gipfel!"}]},
+            model="deepseek-flash",
+            effort="max",
+            raw="{}",
         )
-    )
-    message = SimpleNamespace(tool_calls=[tool_call])
-    response = SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
-    class FakeCompletions:
-        async def create(self, **kwargs):
-            return response
-
-    class FakeClient:
-        def __init__(self, **kwargs) -> None:
-            self.chat = SimpleNamespace(completions=FakeCompletions())
-
-    import openai
-
-    monkeypatch.setattr(openai, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(ranking_module, "complete_json", fake_complete)
 
     context = RankingContext(bike_type=BikeType.road, max_highlights=3, budget_km=100)
     result = await rank_pois(_pois(), context, settings)

@@ -54,6 +54,41 @@
       <p class="mt-4 max-w-3xl text-sm leading-relaxed text-foam/80">{{ plan.summary }}</p>
       {% endif %}
 
+      {% if plan.review %}
+      <div class="review-summary">
+        <div class="review-summary-head">
+          {% if plan.review.accepted %}
+          <span class="chip chip-lime">KI-geprüft</span>
+          {% else %}
+          <span class="chip chip-amber">KI-Prüfung mit Hinweisen</span>
+          {% endif %}
+          <span class="review-metric">Score {{ plan.review.score }}/100</span>
+          <span class="review-metric">
+            Unsicherheit {{ "%.0f"|format((plan.review.uncertainty or 0) * 100) }} %
+          </span>
+          <span class="review-metric">
+            {{ plan.review.rounds }} Prüfrunde{% if plan.review.rounds != 1 %}n{% endif %}
+          </span>
+        </div>
+        {% if plan.review.summary %}
+        <p class="review-summary-text">{{ plan.review.summary }}</p>
+        {% endif %}
+        {% if plan.review.issues %}
+        <ul class="review-issues">
+          {% for issue in plan.review.issues %}
+          <li>
+            <span class="review-severity review-severity-{{ issue.severity }}">{{ issue.severity }}</span>
+            <span>{{ issue.description }}{% if issue.fix_hint %} <span class="review-fix">→ {{ issue.fix_hint }}</span>{% endif %}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if plan.review.model %}
+        <p class="review-model">Geprüft mit {{ plan.review.model }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <div class="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <div class="stat-tile" style="--tile-glow: rgba(200, 245, 96, 0.24)">
           <div class="stat-label">
