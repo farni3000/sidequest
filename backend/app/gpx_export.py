@@ -23,29 +23,52 @@ def build_gpx(
     geometry: list[tuple[float, float]],
     elevations: list[float] | None = None,
     highlights: list[dict[str, Any]] | None = None,
+    shaping_points: list[dict[str, Any]] | None = None,
 ) -> str:
     """Render a route to a GPX 1.1 document.
 
     ``geometry`` is a list of (lat, lon); ``elevations`` an optional parallel
     list. Highlights become ``<wpt>`` entries with name and description.
+
+    When ``shaping_points`` is given, the track only contains those important
+    points. komoot can then "match the route to known ways" and replan the
+    roads between them. The full geometry stays available in the app.
     """
     gpx = gpxpy.gpx.GPX()
     gpx.creator = "sidequest"
     gpx.name = name
 
+    sparse = shaping_points if shaping_points and len(shaping_points) >= 2 else None
+
     track = gpxpy.gpx.GPXTrack(name=name)
-    track.description = "Erstellt mit sidequest (AI-Radroutenplaner)"
+    track.description = (
+        "Erstellt mit sidequest (AI-Radroutenplaner) – ausgedünnte Wegpunkte "
+        "für Komoot (Route an bekannte Wege angleichen)"
+        if sparse is not None
+        else "Erstellt mit sidequest (AI-Radroutenplaner)"
+    )
     gpx.tracks.append(track)
 
     segment = gpxpy.gpx.GPXTrackSegment()
     track.segments.append(segment)
-    for index, (lat, lon) in enumerate(geometry):
-        elevation = None
-        if elevations and index < len(elevations):
-            elevation = elevations[index]
-        segment.points.append(
-            gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon, elevation=elevation)
-        )
+    if sparse is not None:
+        for point in sparse:
+            elevation = point.get("elevation")
+            segment.points.append(
+                gpxpy.gpx.GPXTrackPoint(
+                    latitude=float(point["lat"]),
+                    longitude=float(point["lon"]),
+                    elevation=float(elevation) if elevation is not None else None,
+                )
+            )
+    else:
+        for index, (lat, lon) in enumerate(geometry):
+            elevation = None
+            if elevations and index < len(elevations):
+                elevation = elevations[index]
+            segment.points.append(
+                gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon, elevation=elevation)
+            )
 
     for highlight in highlights or []:
         waypoint = gpxpy.gpx.GPXWaypoint(

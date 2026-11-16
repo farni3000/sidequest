@@ -8,6 +8,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
+from .. import map_image
+from ..ai import route_shaping
 from ..ai.route_review import (
     RouteContext,
     RouteReview,
@@ -19,7 +21,7 @@ from ..ai.route_review import (
 from ..config import Settings
 from ..corridor import corridor_points, corridor_width_m, loop_waypoints, roundtrip_radius_km
 from ..geocoding import geocode
-from ..models import Highlight, RoutePlan
+from ..models import Highlight, PlanShapingPoint, RoutePlan
 from ..poi.overpass import POI, OverpassError, fetch_pois
 from ..poi.ranking import RankingContext, RankingResult, rank_pois
 from ..routing.base import (
@@ -92,6 +94,7 @@ class PlanView(BaseModel):
     review: ReviewView | None = None
     warnings: list[str] = Field(default_factory=list)
     gpx_url: str = "#"
+    gpx_point_count: int = 0
 
 
 def _detour_budget(form: PlanForm, width_m: int) -> float:
@@ -134,6 +137,45 @@ def _waypoints(
             route.append(coords)
             route.extend(grouped.get(key, []))
     return route
+
+
+def _prune_free_waypoints(
+    free_waypoints: list[Any], selected: list[tuple[POI, str]]
+) -> list[Any]:
+    """Drop shaping points whose anchor highlight was removed."""
+    anchors = {poi.osm_id for poi, _rationale in selected}
+    return [
+        waypoint
+        for waypoint in free_waypoints
+        if getattr(waypoint, "after", "start") in anchors
+        or getattr(waypoint, "after", "start") in ("start", "end")
+    ]
+
+
+def _highlight_payload(selected: list[tuple[POI, str]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "osm_id": poi.osm_id,
+            "name": poi.name,
+            "category": poi.category,
+            "detour_km": poi.detour_km,
+            "rationale": rationale,
+        }
+        for poi, rationale in selected
+    ]
+
+
+def _highlight_markers(selected: list[tuple[POI, str]]) -> list[map_image.MapMarker]:
+    return [
+        map_image.MapMarker(
+            name=poi.name,
+            category=poi.category,
+            lat=poi.lat,
+            lon=poi.lon,
+            order=index,
+        )
+        for index, (poi, _rationale) in enumerate(selected, start=1)
+    ]
 
 
 def _apply_revision(
@@ -250,6 +292,112 @@ def _review_view(review: RouteReview | None, rounds: int) -> ReviewView | None:
     )
 
 
+async def _select_gpx_points(
+    form: PlanForm,
+    result: Any,
+    selected: list[tuple[POI, str]],
+    free_waypoints: list[Any],
+    settings: Settings,
+    warnings: list[str],
+    on_event: EventCallback | None,
+    start_label: str,
+    end_label: str,
+) -> list[route_shaping.SelectedShapingPoint]:
+    """Reduce the routed geometry to the sparse waypoints used by the GPX."""
+    if not settings.gpx_shaping_enabled or not result.geometry:
+        return []
+
+    spacing_km = max(
+        3.0,
+        settings.gpx_point_spacing_km,
+        result.distance_km / max(1, settings.gpx_max_points),
+    )
+    candidates = route_shaping.build_shaping_candidates(
+        [(lat, lon) for lat, lon in result.geometry],
+        result.elevations,
+        _highlight_payload(selected),
+        anchors=[
+            {
+                "lat": waypoint.lat,
+                "lon": waypoint.lon,
+                "reason": getattr(waypoint, "reason", ""),
+            }
+            for waypoint in free_waypoints
+        ],
+        spacing_km=spacing_km,
+        max_points=settings.gpx_max_points,
+        min_spacing_km=settings.gpx_min_point_spacing_km,
+    )
+    if not candidates:
+        return []
+
+    if not settings.has_deepseek:
+        return route_shaping.fallback_shaping_points(candidates)
+
+    await _emit(
+        on_event,
+        {"type": "status", "message": "GPX-Wegpunkte werden per Bildmodell gewählt …"},
+    )
+    try:
+        candidate_map = await map_image.render_route_map(
+            [(lat, lon) for lat, lon in result.geometry],
+            _highlight_markers(selected),
+            settings,
+            distance_km=result.distance_km,
+            requested_distance_km=form.distance_km,
+            elevation_gain_m=result.elevation_gain_m,
+            bike_label=BIKE_TYPE_LABELS.get(form.bike_type, form.bike_type.value),
+            round_trip=form.round_trip,
+            start_label=start_label,
+            end_label=end_label,
+            candidates=[
+                map_image.MapCandidate(
+                    lat=candidate.lat,
+                    lon=candidate.lon,
+                    order=candidate.order,
+                    label=candidate.label,
+                )
+                for candidate in candidates
+            ],
+            title="sidequest · GPX-Wegpunkte",
+            headline=f"{result.distance_km:.1f} km · {len(candidates)} Kandidaten",
+        )
+        context = {
+            "radtyp": BIKE_TYPE_LABELS.get(form.bike_type, form.bike_type.value),
+            "mtb_haerte": (
+                MTB_DIFFICULTY_LABELS.get(form.mtb_difficulty)
+                if form.mtb_difficulty
+                else None
+            ),
+            "distanz_km": round(result.distance_km, 1),
+            "wunsch_km": form.distance_km,
+            "heat": form.heat,
+            "freitext": form.freetext,
+            "rundtour": form.round_trip,
+            "highlights": [
+                {"name": poi.name, "category": poi.category}
+                for poi, _rationale in selected
+            ],
+        }
+        selection = await route_shaping.select_gpx_points(
+            candidate_map,
+            context,
+            candidates,
+            [(lat, lon) for lat, lon in result.geometry],
+            result.elevations,
+            settings,
+        )
+        if selection.points:
+            return selection.points
+        return route_shaping.fallback_shaping_points(candidates)
+    except Exception as exc:  # noqa: BLE001 - GPX export must still work
+        warnings.append(
+            f"GPX-Wegpunkte konnten nicht per Bildmodell gewählt werden ({exc}); "
+            "eine gleichmäßige Auswahl wird verwendet."
+        )
+        return route_shaping.fallback_shaping_points(candidates)
+
+
 async def _emit(on_event: EventCallback | None, payload: dict[str, Any]) -> None:
     if on_event is None:
         return
@@ -335,15 +483,124 @@ async def create_plan(
             "Kein Routing-Provider konfiguriert. Bitte ORS_API_KEY setzen oder BRouter starten."
         )
 
+    # --- Vision route draft: let the image model shape the route -----------
+    draft_free: list[Any] = []
+    if settings.vision_route_draft_enabled and settings.has_deepseek:
+        await _emit(
+            on_event,
+            {"type": "status", "message": "Bildmodell entwirft die Route …"},
+        )
+        try:
+            selected_ids = {poi.osm_id for poi, _rationale in selected}
+            extras = sorted(
+                (poi for poi in pois if poi.osm_id not in selected_ids),
+                key=lambda poi: poi.detour_km,
+            )
+            candidate_pool = [poi for poi, _rationale in selected]
+            candidate_pool.extend(extras[: max(0, 24 - len(candidate_pool))])
+            candidate_pool = candidate_pool[:24]
+            candidates_payload = [
+                {
+                    "osm_id": poi.osm_id,
+                    "name": poi.name,
+                    "category": poi.category,
+                    "detour_km": poi.detour_km,
+                    "distance_to_route_km": poi.distance_to_route_km,
+                    "lat": poi.lat,
+                    "lon": poi.lon,
+                }
+                for poi in candidate_pool
+            ]
+            markers = [
+                map_image.MapMarker(
+                    name=poi.name,
+                    category=poi.category,
+                    lat=poi.lat,
+                    lon=poi.lon,
+                    order=index,
+                )
+                for index, poi in enumerate(candidate_pool, start=1)
+            ]
+            area_map = await map_image.render_area_map(
+                start,
+                end,
+                markers,
+                settings,
+                reference_path=(
+                    [start, *loop_pts, start] if form.round_trip else reference_path
+                ),
+                round_trip=form.round_trip,
+                requested_distance_km=form.distance_km,
+                bike_label=BIKE_TYPE_LABELS.get(form.bike_type, form.bike_type.value),
+                start_label=start_label,
+                end_label=end_label,
+            )
+            draft = await route_shaping.draft_route(
+                area_map,
+                route_shaping.DraftContext(
+                    bike_label=BIKE_TYPE_LABELS.get(form.bike_type, form.bike_type.value),
+                    mtb_label=(
+                        MTB_DIFFICULTY_LABELS.get(form.mtb_difficulty)
+                        if form.mtb_difficulty
+                        else None
+                    ),
+                    start_label=start_label,
+                    end_label=end_label,
+                    round_trip=form.round_trip,
+                    requested_distance_km=form.distance_km,
+                    heat=form.heat,
+                    freetext=form.freetext,
+                    summary=ranking.summary,
+                ),
+                [(poi.osm_id, rationale) for poi, rationale in selected],
+                candidates_payload,
+                start=start,
+                end=end,
+                round_trip=form.round_trip,
+                radius_km=(
+                    roundtrip_radius_km(form.distance_km, form.heat)
+                    if form.round_trip
+                    else None
+                ),
+                corridor_width_m=width_m,
+                settings=settings,
+            )
+            if draft.highlights:
+                drafted: list[tuple[POI, str]] = []
+                for entry in draft.highlights:
+                    poi = poi_by_id.get(entry.osm_id)
+                    if poi is None:
+                        continue
+                    rationale = entry.reason or next(
+                        (
+                            reason
+                            for existing_poi, reason in selected
+                            if existing_poi.osm_id == entry.osm_id
+                        ),
+                        "Vom Bildmodell gewählt.",
+                    )
+                    drafted.append((poi, rationale))
+                if drafted:
+                    selected = drafted
+            draft_free = list(draft.shaping)
+        except Exception as exc:  # noqa: BLE001 - draft is an enhancement
+            warnings.append(
+                f"Bildmodell-Routenentwurf nicht verfügbar ({exc}). "
+                "Die bisherige Auswahl bleibt."
+            )
+
     async def _attempt(
         candidate: list[tuple[POI, str]],
         loop: list[tuple[float, float]],
         free: list[Any] | None = None,
     ):
+        effective_loop = [] if (free and not candidate) else loop
         return await route_with_fallback(
             provider_list,
             RouteRequest(
-                waypoints=_waypoints(start, end, candidate, form.round_trip, loop, free),
+                waypoints=_waypoints(
+                    start, end, candidate, form.round_trip, effective_loop, free
+                ),
                 bike_type=form.bike_type,
                 mtb_difficulty=form.mtb_difficulty,
             ),
@@ -354,17 +611,33 @@ async def create_plan(
     route_warnings: list[str] = []
     last_error: RoutingError | None = None
 
-    for drop in range(len(selected) + 1):
-        candidate = selected[: len(selected) - drop]
-        try:
-            result, route_warnings = await _attempt(candidate, loop_pts)
-        except RoutingError as exc:
-            last_error = exc
-            continue
-        selected = candidate
-        if drop:
-            warnings.append(f"{drop} nicht anfahrbare(s) Highlight(s) wurden ausgelassen.")
-        break
+    free_waypoints: list[Any] = list(draft_free)
+    for free_option in ([free_waypoints, []] if free_waypoints else [[]]):
+        for drop in range(len(selected) + 1):
+            candidate = selected[: len(selected) - drop]
+            try:
+                result, route_warnings = await _attempt(candidate, loop_pts, free_option)
+            except RoutingError as exc:
+                last_error = exc
+                continue
+            selected = candidate
+            free_waypoints = _prune_free_waypoints(free_option, selected)
+            if drop:
+                warnings.append(
+                    f"{drop} nicht anfahrbare(s) Highlight(s) wurden ausgelassen."
+                )
+            if free_option and not free_waypoints:
+                warnings.append(
+                    "Die Wegpunkte des Bildmodells lagen hinter entfernten Highlights "
+                    "und wurden ausgelassen."
+                )
+            break
+        if result is not None:
+            break
+        if free_option:
+            warnings.append(
+                "Die Wegpunkte des Bildmodells waren nicht anfahrbar und wurden verworfen."
+            )
 
     if result is None and form.round_trip:
         radius = roundtrip_radius_km(form.distance_km, form.heat)
@@ -374,6 +647,7 @@ async def create_plan(
                 result, route_warnings = await _attempt([], alternative)
                 loop_pts = alternative
                 selected = []
+                free_waypoints = []
                 warnings.append("Rundtour ohne Highlights (POIs waren nicht anfahrbar).")
                 break
             except RoutingError as exc:
@@ -395,26 +669,30 @@ async def create_plan(
         },
     )
 
-    if form.distance_km and selected and result.distance_km > form.distance_km * 1.4:
-        for _ in range(2):
-            selected = selected[:-1]
-            waypoints = _waypoints(start, end, selected, form.round_trip, loop_pts)
+    if (
+        form.distance_km
+        and (selected or free_waypoints)
+        and result.distance_km > form.distance_km * 1.4
+    ):
+        removed = False
+        while (
+            result.distance_km > form.distance_km * 1.4
+            and (free_waypoints or selected)
+        ):
+            if free_waypoints:
+                free_waypoints = free_waypoints[:-1]
+            else:
+                selected = selected[:-1]
             try:
-                result, _ = await route_with_fallback(
-                    provider_list,
-                    RouteRequest(
-                        waypoints=waypoints,
-                        bike_type=form.bike_type,
-                        mtb_difficulty=form.mtb_difficulty,
-                    ),
-                )
+                result, _ = await _attempt(selected, loop_pts, free_waypoints or None)
             except RoutingError:
                 break
-            if result.distance_km <= form.distance_km * 1.4:
-                break
-        warnings.append(
-            "Die Route überschritt die Wunschdistanz deutlich; das letzte Highlight wurde entfernt."
-        )
+            removed = True
+        if removed:
+            warnings.append(
+                "Die Route überschritt die Wunschdistanz deutlich; "
+                "Zwischenpunkte/Highlights wurden entfernt."
+            )
 
     # --- Vision review + up to two correction rounds -----------------------
     review_history: list[RouteReview] = []
@@ -422,9 +700,8 @@ async def create_plan(
     best_result = result
     best_selected = list(selected)
     best_loop = list(loop_pts)
-    best_free: list[Any] = []
+    best_free: list[Any] = list(free_waypoints)
     best_score = -1
-    free_waypoints: list[Any] = []
 
     max_rounds = min(3, max(0, settings.route_review_max_rounds))
     if settings.route_review_enabled and settings.has_deepseek and max_rounds:
@@ -441,20 +718,9 @@ async def create_plan(
                 },
             )
             try:
-                from ..map_image import MapMarker, render_route_map
-
-                route_map = await render_route_map(
+                route_map = await map_image.render_route_map(
                     [(lat, lon) for lat, lon in current_result.geometry],
-                    [
-                        MapMarker(
-                            name=poi.name,
-                            category=poi.category,
-                            lat=poi.lat,
-                            lon=poi.lon,
-                            order=index,
-                        )
-                        for index, (poi, _rationale) in enumerate(current_selected, start=1)
-                    ],
+                    _highlight_markers(current_selected),
                     settings,
                     distance_km=current_result.distance_km,
                     requested_distance_km=form.distance_km,
@@ -613,21 +879,26 @@ async def create_plan(
                 {"type": "status", "message": "Route wird mit den Änderungen neu berechnet …"},
             )
 
-            used_free = list(revision.free_waypoints)
+            existing_free = _prune_free_waypoints(free_waypoints, new_selected)
+            used_free = [*existing_free, *revision.free_waypoints]
             try:
                 new_result, new_warnings = await _attempt(
                     new_selected, new_loop, used_free
                 )
             except RoutingError:
-                used_free = []
+                used_free = existing_free
                 try:
-                    new_result, new_warnings = await _attempt(new_selected, new_loop)
+                    new_result, new_warnings = await _attempt(
+                        new_selected, new_loop, used_free or None
+                    )
                     warnings.append(
-                        "Freie Zwischenwegpunkte waren nicht anfahrbar und wurden verworfen."
+                        "Neue freie Zwischenwegpunkte waren nicht anfahrbar und "
+                        "wurden verworfen."
                     )
                 except RoutingError as exc:
                     warnings.append(
-                        "Die korrigierte Route war nicht berechenbar; die vorherige Route bleibt."
+                        "Die korrigierte Route war nicht berechenbar; "
+                        "die vorherige Route bleibt."
                     )
                     last_error = exc
                     break
@@ -655,6 +926,17 @@ async def create_plan(
             free_waypoints = best_free
 
     review_view = _review_view(best_review, len(review_history))
+    gpx_points = await _select_gpx_points(
+        form,
+        result,
+        selected,
+        free_waypoints,
+        settings,
+        warnings,
+        on_event,
+        start_label,
+        end_label,
+    )
 
     plan = RoutePlan(
         bike_type=form.bike_type.value,
@@ -693,6 +975,20 @@ async def create_plan(
                 detour_km=poi.detour_km,
                 rationale=rationale,
                 order_index=index,
+            )
+        )
+    for index, point in enumerate(gpx_points, start=1):
+        session.add(
+            PlanShapingPoint(
+                plan_id=plan.id,
+                order_index=index,
+                lat=point.lat,
+                lon=point.lon,
+                elevation=point.elevation,
+                kind=point.kind,
+                label=point.label or None,
+                reason=point.reason or None,
+                osm_id=point.osm_id or None,
             )
         )
     session.commit()
@@ -735,4 +1031,9 @@ async def create_plan(
         review=review_view,
         warnings=warnings,
         gpx_url=f"/plan/{plan.id}/gpx",
+        gpx_point_count=(
+            len(gpx_points)
+            if settings.gpx_shaping_enabled and gpx_points
+            else 0
+        ),
     )

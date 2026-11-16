@@ -30,16 +30,29 @@ class Settings(BaseSettings):
     deepseek_model_cache_ttl_s: int = 3600
     deepseek_timeout_s: float = 180.0
 
+    # Vision-based route draft (before routing)
+    vision_route_draft_enabled: bool = True
+    vision_route_draft_max_waypoints: int = 12
+    vision_route_draft_timeout_s: float = 180.0
+
     # Automatic route review (vision model + optional correction rounds)
     route_review_enabled: bool = True
     route_review_max_rounds: int = 3
     route_review_image_width: int = 1200
     route_review_image_height: int = 900
     route_review_timeout_s: float = 180.0
-    route_review_max_free_waypoints: int = 2
+    route_review_max_free_waypoints: int = 6
     route_review_max_free_waypoint_offset_km: float = 25.0
     route_review_save_images: bool = False
     route_review_data_dir: str = "./data/reviews"
+
+    # Sparse GPX export: only important shaping points, komoot replans the rest.
+    gpx_shaping_enabled: bool = True
+    gpx_point_spacing_km: float = 4.0
+    gpx_min_point_spacing_km: float = 2.0
+    gpx_max_points: int = 30
+    gpx_max_gap_km: float = 5.0
+    gpx_point_snap_tolerance_km: float = 0.35
 
     # Routing providers
     ors_api_key: str | None = None

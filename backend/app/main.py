@@ -15,11 +15,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlmodel import Session, select
 
+from .ai import route_shaping
 from .config import get_settings
 from .db import create_db_engine, init_db
 from .geocoding import GeocodingError
 from .gpx_export import build_gpx, gpx_filename
-from .models import Highlight, RoutePlan
+from .models import Highlight, PlanShapingPoint, RoutePlan
 from .routing.base import BIKE_TYPE_LABELS, MTB_DIFFICULTY_LABELS, BikeType, MtbDifficulty
 from .schemas import PlanForm
 from .services.planner import PlanError, create_plan
@@ -216,6 +217,52 @@ async def download_gpx(plan_id: int, session: Annotated[Session, Depends(get_ses
         .order_by(Highlight.order_index)  # type: ignore[arg-type]
     ).all()
 
+    shaping_rows = session.exec(
+        select(PlanShapingPoint)
+        .where(PlanShapingPoint.plan_id == plan_id)
+        .order_by(PlanShapingPoint.order_index)  # type: ignore[arg-type]
+    ).all()
+    shaping_points = [
+        {
+            "lat": point.lat,
+            "lon": point.lon,
+            "elevation": point.elevation,
+        }
+        for point in shaping_rows
+    ]
+    if not shaping_points and settings.gpx_shaping_enabled:
+        # Old plans (or plans created before this feature) still get a sparse
+        # fallback instead of a dense track.
+        candidates = route_shaping.build_shaping_candidates(
+            [(lat, lon) for lat, lon in plan.geometry],
+            plan.elevations,
+            [
+                {
+                    "osm_id": highlight.osm_id,
+                    "name": highlight.name,
+                    "lat": highlight.lat,
+                    "lon": highlight.lon,
+                    "rationale": highlight.rationale,
+                }
+                for highlight in highlights
+            ],
+            spacing_km=max(
+                3.0,
+                settings.gpx_point_spacing_km,
+                plan.distance_km / max(1, settings.gpx_max_points),
+            ),
+            max_points=settings.gpx_max_points,
+            min_spacing_km=settings.gpx_min_point_spacing_km,
+        )
+        shaping_points = [
+            {
+                "lat": point.lat,
+                "lon": point.lon,
+                "elevation": point.elevation,
+            }
+            for point in route_shaping.fallback_shaping_points(candidates)
+        ]
+
     name = f"sidequest {plan.start_label or ''} -> {plan.end_label or ''}".strip()
     gpx_xml = build_gpx(
         name=name,
@@ -230,6 +277,7 @@ async def download_gpx(plan_id: int, session: Annotated[Session, Depends(get_ses
             }
             for highlight in highlights
         ],
+        shaping_points=shaping_points,
     )
     return Response(
         content=gpx_xml,

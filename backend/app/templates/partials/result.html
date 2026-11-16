@@ -180,7 +180,13 @@
         </svg>
         Als GPX exportieren
       </a>
-      <span class="text-xs text-sage">Import in Komoot oder jede Karten-App möglich.</span>
+      <span class="text-xs text-sage">
+        {% if plan.gpx_point_count %}
+        {{ plan.gpx_point_count }} Wegpunkte · in Komoot „An bekannte Wege angleichen“ wählen.
+        {% else %}
+        Import in Komoot oder jede Karten-App möglich.
+        {% endif %}
+      </span>
     </div>
 
     {% if plan.warnings %}

@@ -74,6 +74,16 @@ class MapMarker:
 
 
 @dataclass(frozen=True)
+class MapCandidate:
+    """Small numbered dot for a possible GPX shaping point."""
+
+    lat: float
+    lon: float
+    order: int
+    label: str = ""
+
+
+@dataclass(frozen=True)
 class RouteMap:
     image: bytes
     width: int
@@ -293,6 +303,9 @@ def _draw_legend(
     start_label: str,
     end_label: str,
     markers: list[MapMarker],
+    title: str = "sidequest · Routenprüfung",
+    headline: str | None = None,
+    note: str | None = None,
 ) -> None:
     width, height = base.size
     title_font = _font(max(15, height // 52), bold=True)
@@ -305,7 +318,7 @@ def _draw_legend(
 
     lines: list[tuple[str, Any]] = [
         (
-            f"{distance_km:.1f} km · {elevation_gain_m:.0f} hm",
+            headline or f"{distance_km:.1f} km · {elevation_gain_m:.0f} hm",
             body_font,
         ),
         (
@@ -319,6 +332,8 @@ def _draw_legend(
     ]
     for marker in markers[:6]:
         lines.append((f"{marker.order}. {_fit_text(marker.name, 31)}", small_font))
+    if note:
+        lines.append((note, small_font))
     lines.append(("Karte © Esri, HERE, Garmin, USGS", tiny_font))
 
     legend_width = min(width - 32, 360)
@@ -333,7 +348,7 @@ def _draw_legend(
         outline=(238, 243, 231, 45),
         width=1,
     )
-    draw.text((x0 + 16, y0 + 12), "sidequest · Routenprüfung", font=title_font, fill="#cdf56f")
+    draw.text((x0 + 16, y0 + 12), title, font=title_font, fill="#cdf56f")
 
     cursor_y = y0 + 42
     for text, font in lines:
@@ -387,6 +402,129 @@ def _draw_marker(
     draw.text((x, y), label, font=font, fill=text_fill, anchor="mm")
 
 
+def _draw_dashed_line(
+    draw: ImageDraw.ImageDraw,
+    points: list[tuple[float, float]],
+    *,
+    fill: str,
+    width: int = 4,
+    dash: int = 14,
+    gap: int = 10,
+) -> None:
+    """Draw a simple dashed polyline (Pillow has no native dash support)."""
+    if len(points) < 2:
+        return
+    pattern = dash + gap
+    carry = 0.0
+    for start, end in zip(points, points[1:], strict=False):
+        x1, y1 = start
+        x2, y2 = end
+        dx, dy = x2 - x1, y2 - y1
+        length = math.hypot(dx, dy)
+        if length <= 0:
+            continue
+        ux, uy = dx / length, dy / length
+        pos = 0.0
+        while pos < length:
+            phase = (carry + pos) % pattern
+            if phase < dash:
+                run = min(dash - phase, length - pos)
+                draw.line(
+                    [
+                        (x1 + ux * pos, y1 + uy * pos),
+                        (x1 + ux * (pos + run), y1 + uy * (pos + run)),
+                    ],
+                    fill=fill,
+                    width=width,
+                )
+                pos += run
+            else:
+                pos += min(pattern - phase, length - pos)
+        carry = (carry + length) % pattern
+
+
+def _draw_candidates(
+    draw: ImageDraw.ImageDraw,
+    candidates: list[MapCandidate],
+    bounds: tuple[float, float, float, float],
+    width: int,
+    height: int,
+) -> None:
+    font = _font(max(9, height // 96), bold=True)
+    radius = max(8, height // 105)
+    for candidate in candidates:
+        mx, my = _pixel(
+            [lonlat_to_mercator(candidate.lat, candidate.lon)], bounds, width, height
+        )[0]
+        _draw_marker(
+            draw,
+            (mx, my),
+            str(candidate.order),
+            fill="#17382a",
+            text_fill="#d9ffb0",
+            radius=radius,
+            font=font,
+        )
+
+
+async def _base_map(bounds, width: int, height: int) -> Image.Image:
+    raw = await _fetch_base_map(bounds, width, height)
+    try:
+        base = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:  # noqa: BLE001
+        raise MapImageError(f"Kartenbild ist nicht lesbar: {exc}") from exc
+    if base.size != (width, height):
+        base = base.resize((width, height), Image.Resampling.LANCZOS)
+    return base
+
+
+def _map_size(settings: Settings) -> tuple[int, int]:
+    width = max(600, min(2000, settings.route_review_image_width))
+    height = max(450, min(2000, settings.route_review_image_height))
+    return width, height
+
+
+def _finalize_map(
+    base: Image.Image,
+    bounds: tuple[float, float, float, float],
+    settings: Settings,
+    *,
+    prefix: str = "route-review",
+) -> RouteMap:
+    out = io.BytesIO()
+    base.convert("RGB").save(out, format="JPEG", quality=90, optimize=True)
+
+    if settings.route_review_save_images:
+        directory = os.path.abspath(settings.route_review_data_dir)
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(
+            directory, f"{prefix}-{int.from_bytes(os.urandom(4), 'big')}.jpg"
+        )
+        with open(path, "wb") as handle:
+            handle.write(out.getvalue())
+
+    return RouteMap(
+        image=out.getvalue(),
+        width=base.width,
+        height=base.height,
+        bounds=bounds,
+    )
+
+
+def _route_pixels(
+    geometry: list[tuple[float, float]],
+    bounds: tuple[float, float, float, float],
+    width: int,
+    height: int,
+) -> list[tuple[float, float]]:
+    # Downsample very long tracks; drawing every point adds no visible detail.
+    step = max(1, len(geometry) // 2500)
+    sampled = [lonlat_to_mercator(lat, lon) for lat, lon in geometry[::step]]
+    if sampled[-1] != lonlat_to_mercator(*geometry[-1]):
+        sampled.append(lonlat_to_mercator(*geometry[-1]))
+    return _pixel(sampled, bounds, width, height)
+
+
 async def render_route_map(
     geometry: list[tuple[float, float]],
     markers: list[MapMarker],
@@ -399,35 +537,26 @@ async def render_route_map(
     round_trip: bool = False,
     start_label: str = "",
     end_label: str = "",
+    candidates: list[MapCandidate] | None = None,
+    title: str = "sidequest · Routenprüfung",
+    headline: str | None = None,
 ) -> RouteMap:
     """Download the topo basemap and draw the route + highlights on it."""
     if not geometry:
         raise MapImageError("Keine Route für das Kartenbild vorhanden.")
 
-    width = max(600, min(2000, settings.route_review_image_width))
-    height = max(450, min(2000, settings.route_review_image_height))
+    width, height = _map_size(settings)
     bounds = _map_bounds(geometry, width, height)
-    raw = await _fetch_base_map(bounds, width, height)
-
-    try:
-        base = Image.open(io.BytesIO(raw)).convert("RGB")
-    except Exception as exc:  # noqa: BLE001
-        raise MapImageError(f"Kartenbild ist nicht lesbar: {exc}") from exc
-
-    if base.size != (width, height):
-        base = base.resize((width, height), Image.Resampling.LANCZOS)
-
-    # Downsample very long tracks; drawing every point adds no visible detail.
-    step = max(1, len(geometry) // 2500)
-    sampled = [lonlat_to_mercator(lat, lon) for lat, lon in geometry[::step]]
-    if sampled[-1] != lonlat_to_mercator(*geometry[-1]):
-        sampled.append(lonlat_to_mercator(*geometry[-1]))
-    pixels = _pixel(sampled, bounds, width, height)
+    base = await _base_map(bounds, width, height)
+    pixels = _route_pixels(geometry, bounds, width, height)
 
     draw = ImageDraw.Draw(base)
     if len(pixels) > 1:
         draw.line(pixels, fill="#10301a", width=11, joint="curve")
         draw.line(pixels, fill="#a8e63c", width=5, joint="curve")
+
+    if candidates:
+        _draw_candidates(draw, candidates, bounds, width, height)
 
     start_font = _font(max(13, height // 64), bold=True)
     _draw_marker(
@@ -475,22 +604,89 @@ async def render_route_map(
         start_label=start_label,
         end_label=end_label,
         markers=markers,
+        title=title,
+        headline=headline,
     )
-    final = canvas.convert("RGB")
+    return _finalize_map(canvas, bounds, settings)
 
-    out = io.BytesIO()
-    final.save(out, format="JPEG", quality=90, optimize=True)
 
-    if settings.route_review_save_images:
-        directory = os.path.abspath(settings.route_review_data_dir)
-        os.makedirs(directory, exist_ok=True)
-        path = os.path.join(directory, f"route-review-{int.from_bytes(os.urandom(4), 'big')}.jpg")
-        with open(path, "wb") as handle:
-            handle.write(out.getvalue())
+async def render_area_map(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    markers: list[MapMarker],
+    settings: Settings,
+    *,
+    reference_path: list[tuple[float, float]],
+    round_trip: bool = False,
+    requested_distance_km: float | None = None,
+    bike_label: str = "",
+    start_label: str = "",
+    end_label: str = "",
+) -> RouteMap:
+    """Overview map used by the vision model to draft the route.
 
-    return RouteMap(
-        image=out.getvalue(),
-        width=width,
-        height=height,
+    No route exists yet: only the requested corridor/loop and the candidate
+    highlights are drawn, so the model can place new shaping points.
+    """
+    points = [start, end, *reference_path, *[(m.lat, m.lon) for m in markers]]
+    width, height = _map_size(settings)
+    bounds = _map_bounds(points, width, height)
+    base = await _base_map(bounds, width, height)
+    draw = ImageDraw.Draw(base)
+
+    path_pixels = _route_pixels(reference_path or [start, end], bounds, width, height)
+    _draw_dashed_line(draw, path_pixels, fill="#17382a", width=5)
+
+    start_font = _font(max(13, height // 64), bold=True)
+    start_xy = _pixel([lonlat_to_mercator(*start)], bounds, width, height)[0]
+    end_xy = _pixel([lonlat_to_mercator(*end)], bounds, width, height)[0]
+    _draw_marker(
+        draw,
+        start_xy,
+        "S",
+        fill="#2fd06a",
+        text_fill="#08110c",
+        radius=max(12, height // 60),
+        font=start_font,
+    )
+    if not round_trip:
+        _draw_marker(
+            draw,
+            end_xy,
+            "Z",
+            fill="#e45757",
+            text_fill="#fff5f2",
+            radius=max(12, height // 60),
+            font=start_font,
+        )
+
+    marker_font = _font(max(10, height // 76), bold=True)
+    for marker in markers:
+        mx, my = _pixel([lonlat_to_mercator(marker.lat, marker.lon)], bounds, width, height)[0]
+        _draw_marker(
+            draw,
+            (mx, my),
+            str(marker.order),
+            fill=_CATEGORY_COLORS.get(marker.category, _CATEGORY_COLORS["poi"]),
+            text_fill="#ffffff",
+            radius=max(10, height // 78),
+            font=marker_font,
+        )
+
+    canvas = base.convert("RGBA")
+    _draw_legend(
+        canvas,
         bounds=bounds,
+        distance_km=0.0,
+        requested_distance_km=requested_distance_km,
+        elevation_gain_m=0.0,
+        bike_label=bike_label,
+        round_trip=round_trip,
+        start_label=start_label,
+        end_label=end_label,
+        markers=markers,
+        title="sidequest · Routenentwurf",
+        headline="Routenentwurf",
+        note="Gestrichelt: gewünschter Korridor",
     )
+    return _finalize_map(canvas, bounds, settings, prefix="route-draft")

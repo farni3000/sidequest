@@ -4,9 +4,10 @@ Erzeugt auf Anfrage individuelle, fahrbare Radrouten anhand von Fahrradart,
 Distanz, einem „Heat“-Regler und Freitext-Wünschen. Die App sucht selbstständig
 interessante Abschnitte (Aussichtspunkte, Gipfel, MTB-Trails, historische Orte)
 in der Nähe der Route, lässt eine KI die lohnendsten auswählen und berechnet
-daraus eine reale Strecke. Anschließend prüft ein Vision-Modell die fertige
-Route anhand eines Kartenbilds und korrigiert sie bei Bedarf. Ergebnis ist eine
-**GPX-Datei** zum Import in Komoot oder jede andere Karten-App.
+daraus eine reale Strecke. Ein Vision-Modell entwirft die Streckenführung anhand
+einer Karte mit, prüft die fertige Route und korrigiert sie bei Bedarf. Ergebnis
+ist eine **GPX-Datei** mit ausgedünnten, wichtigen Wegpunkten zum Import in
+Komoot oder jede andere Karten-App.
 
 > Es gibt keine offene Komoot-API zum Anlegen von Touren – daher ist der
 > GPX-Export der Zielpfad. Strava-Heatmap-Daten sind bewusst **nicht** Teil von
@@ -26,10 +27,18 @@ Route anhand eines Kartenbilds und korrigiert sie bei Bedarf. Ergebnis ist eine
   dem Heat-Wert (500 m – 8 km).
 - **deepseek** (OpenAI-kompatibel) wählt per JSON-Modus die Highlights aus und
   ordnet sie; ohne Key/bei Fehler greift eine distanzbasierte Auswahl.
+- **Vision-Routenentwurf**: Vor dem Routing bekommt das Bildmodell eine
+  Übersichtskarte mit Korridor und POI-Kandidaten und schlägt geordnete
+  Via-Punkte auf schönen Abschnitten vor. Diese fließen direkt ins Routing ein.
 - **Automatische Streckenprüfung**: Ein Vision-Modell bekommt die
   Originalbeschreibung und ein serverseitig gerendertes Kartenbild der Route.
   Passt die Route nicht, folgt eine Korrekturrunde mit POI-Änderungen und/oder
   freien Zwischenwegpunkten – maximal drei Reviews und zwei Korrekturen.
+- **Ausgedünnter GPX-Export**: Statt des kompletten Tracks enthält die GPX-Datei
+  nur wichtige Wegpunkte (Start/Ziel, Highlights, markante Kurven, schöne
+  Abschnitte, ca. alle 3–5 km). Komoot gleicht beim Import an bekannte Wege an
+  und plant die Straßen dazwischen. Die App zeigt weiterhin die vollständige
+  berechnete Route.
 - **Dynamische Modellwahl**: Modelle und Reasoning-Stufe werden über die
   `/models`-Metadaten des Providers ermittelt (aktuell DeepSeek V4.1 Flash mit
   `reasoning_effort: max`). Neue Modelle werden automatisch berücksichtigt.
@@ -55,13 +64,13 @@ sidequest/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI-Routen + NDJSON-Statusstream
 │   │   ├── config.py               # pydantic-settings
-│   │   ├── models.py               # SQLModel (RoutePlan, Highlight)
+│   │   ├── models.py               # SQLModel (RoutePlan, Highlight, PlanShapingPoint)
 │   │   ├── schemas.py
 │   │   ├── geocoding.py            # ORS-Geocoding + Nominatim-Fallback
 │   │   ├── corridor.py             # Heat -> Korridorbreite/Radius
-│   │   ├── map_image.py            # Routenbild für die Vision-Prüfung
-│   │   ├── gpx_export.py           # GPX 1.1
-│   │   ├── ai/                     # Modell-Discovery + Route-Review/Korrektur
+│   │   ├── map_image.py            # Routenbilder für Entwurf, Review und GPX
+│   │   ├── gpx_export.py           # GPX 1.1 (voller Track oder sparse Wegpunkte)
+│   │   ├── ai/                     # Modell-Discovery, Routenentwurf, Review/Korrektur
 │   │   ├── routing/                # base, brouter, openrouteservice, graphhopper, selector
 │   │   ├── poi/                    # overpass, ranking (deepseek)
 │   │   ├── services/planner.py     # Orchestrierung inkl. Review-Schleife
@@ -146,16 +155,38 @@ Alle Werte kommen aus `.env` (siehe `.env.example`). Wichtig:
 | `DEEPSEEK_API_KEY` | KI-Highlight-Auswahl und Streckenprüfung. Leer = regelbasierter Fallback ohne Vision-Review. |
 | `DEEPSEEK_MODEL` / `DEEPSEEK_VISION_MODEL` | Nur Fallback-Modelle, falls `/models` nicht erreichbar ist. Leer lassen für automatische Auswahl. |
 | `DEEPSEEK_EFFORT` | Optionaler Override der Reasoning-Stufe. Standard: höchste vom Modell unterstützte Stufe (`max`). |
+| `VISION_ROUTE_DRAFT_ENABLED` | Bildmodell entwirft vor dem Routing Via-Punkte (Default: `true`). |
+| `VISION_ROUTE_DRAFT_MAX_WAYPOINTS` | Maximale freie Entwurfspunkte (Default: `12`). |
 | `ROUTE_REVIEW_ENABLED` | Automatische Streckenprüfung an/aus (Default: `true`). |
 | `ROUTE_REVIEW_MAX_ROUNDS` | Maximale Anzahl Reviews (auf 3 begrenzt, Default: `3`). |
 | `ROUTE_REVIEW_TIMEOUT_S` | Timeout pro Review-/Korrektur-Call (Default: `180`). |
-| `ROUTE_REVIEW_MAX_FREE_WAYPOINTS` | Maximale freie Zwischenwegpunkte pro Korrektur (Default: `2`). |
-| `ROUTE_REVIEW_SAVE_IMAGES` | Prüfbilder unter `ROUTE_REVIEW_DATA_DIR` speichern (Default: `false`). |
+| `ROUTE_REVIEW_MAX_FREE_WAYPOINTS` | Maximale freie Zwischenwegpunkte pro Korrektur (Default: `6`). |
+| `ROUTE_REVIEW_SAVE_IMAGES` | Prüf-/Entwurfsbilder unter `ROUTE_REVIEW_DATA_DIR` speichern (Default: `false`). |
+| `GPX_SHAPING_ENABLED` | GPX auf wichtige Wegpunkte ausdünnen (Default: `true`). |
+| `GPX_POINT_SPACING_KM` | Zielabstand der GPX-Punkte (Default: `4`, Richtung 3–5 km). |
+| `GPX_MIN_POINT_SPACING_KM` | Mindestabstand zwischen GPX-Punkten (Default: `2`). |
+| `GPX_MAX_POINTS` | Obergrenze der GPX-Wegpunkte (Default: `30`). |
 | `ORS_API_KEY` | OpenRouteService Routing + Geocoding. |
 | `BROUTER_URL` | BRouter-Endpoint (lokal `http://localhost:17777`, Compose `http://brouter:17777`). |
 | `OVERPASS_URL` / `OVERPASS_FALLBACK_URL` | POI-Suche; Mirror wird bei Überlast automatisch versucht. |
 | `CORRIDOR_MIN_M` / `CORRIDOR_MAX_M` | Korridorbreite bei Heat 0 / 100. |
 | `MAX_HIGHLIGHTS` | Obergrenze eingebauter Highlights. |
+
+## Routenentwurf und GPX-Ausdünnung
+
+1. **Entwurf** – Nach der POI-Auswahl rendert sidequest eine Übersichtskarte
+   (Korridor/Rundtour, Start/Ziel, nummerierte POI-Kandidaten). Das Bildmodell
+   liefert eine geordnete Liste aus Highlights und freien Via-Punkten auf
+   schönen Abschnitten. Die Punkte werden validiert (Korridor, Abstand,
+   Fahrtrichtung) und direkt ins Routing gegeben.
+2. **Routing + Review** – Danach läuft die unveränderte Review-Schleife.
+3. **GPX-Auswahl** – Auf der finalen Route werden Kandidaten im Abstand von
+   ca. 3–5 km erzeugt (plus Highlights und markante Kurven). Das Bildmodell
+   wählt die wichtigen aus und darf bis zu drei schöne Abschnitte ergänzen.
+   Ohne Modell greift eine gleichmäßige deterministische Auswahl.
+4. **Export** – Das GPX enthält nur diese Wegpunkte als Track; Highlights
+   bleiben zusätzlich als `<wpt>` erhalten. Die volle Route bleibt in der App
+   sichtbar und in der Datenbank gespeichert.
 
 ## Automatische Streckenprüfung
 
@@ -166,9 +197,9 @@ Alle Werte kommen aus `.env` (siehe `.env.example`). Wichtig:
    Abweichungen.
 3. **Pass 3** – Bei großen Abweichungen schlägt das Modell Korrekturen vor:
    Highlights hinzufügen/entfernen/umsortieren, Rundtour-Radius/Drehung ändern
-   oder freie Zwischenwegpunkte setzen. Freie Punkte werden als Bildkoordinaten
-   zurückgegeben und serverseitig in Lat/Lon umgerechnet. Danach wird neu
-   geroutet.
+   oder bis zu sechs freie Zwischenwegpunkte auf schönen Straßen setzen. Freie
+   Punkte werden als Bildkoordinaten zurückgegeben und serverseitig in Lat/Lon
+   umgerechnet. Danach wird neu geroutet.
 4. **Pass 4** – Review der neuen Route. Passt sie, ist die Planung fertig.
 5. **Pass 5/6** – Optional eine zweite Korrektur und ein letztes Review. Danach
    wird auf jeden Fall ausgegeben.
@@ -196,7 +227,10 @@ uv run mypy app
 
 1. Route planen und „Als GPX exportieren“ klicken.
 2. In Komoot unter *Planung → Route importieren* die GPX-Datei öffnen.
-3. Die Route enthält alle Highlights zusätzlich als Wegpunkte (`<wpt>`).
+3. Beim Import **„Route an bekannte Wege angleichen“** („Match route to known
+   ways“) wählen. Komoot plant dann die Straßen zwischen den gelieferten
+   Wegpunkten und behält die Highlights als Orientierung.
+4. Die Route enthält alle Highlights zusätzlich als Wegpunkte (`<wpt>`).
 
 ## Fehlerverhalten / Fallbacks
 
@@ -207,8 +241,10 @@ uv run mypy app
 - Overpass nicht erreichbar → Route wird ohne zusätzliche Highlights berechnet,
   mit Hinweis in der UI.
 - deepseek-Fehler/kein Key → nächstgelegene POIs nach Umweg, mit Hinweis.
+- Vision-Routenentwurf fehlgeschlagen → bisherige POI-Auswahl wird verwendet.
 - Kartenbild, Vision-Review oder Korrektur nicht verfügbar → die beste bisherige
   Route wird ausgegeben; die UI zeigt einen Hinweis statt die Planung abzubrechen.
+- GPX-Punktauswahl per Bildmodell fehlgeschlagen → gleichmäßige 3–5-km-Auswahl.
 - Korrektur verschlechtert den Score → die vorherige Route wird behalten.
 
 ## Nicht-Ziele Phase 1

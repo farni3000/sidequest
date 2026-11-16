@@ -4,11 +4,12 @@ from sqlmodel import select
 import app.map_image as map_image
 import app.services.planner as planner
 from app.ai.route_review import FreeWaypoint, RouteReview, RouteRevision
+from app.ai.route_shaping import DraftShaping, RouteDraft
 from app.map_image import RouteMap
-from app.models import Highlight, RoutePlan
+from app.models import Highlight, PlanShapingPoint, RoutePlan
 from app.poi.overpass import POI, OverpassError
 from app.poi.ranking import RankedItem, RankingResult
-from app.routing.base import BikeType, MtbDifficulty
+from app.routing.base import BikeType, MtbDifficulty, RouteRequest, RouteResult
 from app.schemas import PlanForm
 from app.services.planner import PlanError, create_plan
 
@@ -126,6 +127,8 @@ def _review_settings(settings):
     return settings.model_copy(
         update={
             "deepseek_api_key": "test-key",
+            "vision_route_draft_enabled": False,
+            "gpx_shaping_enabled": False,
             "route_review_enabled": True,
             "route_review_max_rounds": 3,
             "route_review_timeout_s": 5.0,
@@ -338,3 +341,87 @@ async def test_free_waypoint_revision_is_routed(monkeypatch, session, settings) 
 
     assert review_calls == 2
     assert any((50.52, 5.52) in call.waypoints for call in provider.calls)
+
+
+# --- vision draft and sparse GPX ------------------------------------------
+
+
+async def test_vision_draft_waypoints_are_routed(
+    monkeypatch, session, settings
+) -> None:
+    _patch(monkeypatch, [_poi()])
+
+    async def fake_area_map(*args, **kwargs):
+        return RouteMap(image=b"jpeg", width=100, height=100, bounds=(0, 0, 1, 1))
+
+    async def fake_draft(*args, **kwargs):
+        return RouteDraft(
+            shaping=[
+                DraftShaping(
+                    after="start",
+                    lat=50.52,
+                    lon=5.52,
+                    reason="Schöne Straße am Fluss",
+                )
+            ],
+            model="deepseek-flash",
+        )
+
+    monkeypatch.setattr(map_image, "render_area_map", fake_area_map)
+    monkeypatch.setattr(planner.route_shaping, "draft_route", fake_draft)
+
+    draft_settings = _review_settings(settings).model_copy(
+        update={"vision_route_draft_enabled": True, "route_review_enabled": False}
+    )
+    provider = MockProvider("mock")
+    form = PlanForm(
+        bike_type=BikeType.road, start="Spa", end="Stavelot", distance_km=40
+    )
+    await create_plan(form, session, draft_settings, providers=[provider])
+
+    assert any((50.52, 5.52) in call.waypoints for call in provider.calls)
+
+
+class DenseProvider:
+    name = "dense"
+
+    def __init__(self) -> None:
+        self.calls: list[RouteRequest] = []
+
+    async def route(self, req: RouteRequest) -> RouteResult:
+        self.calls.append(req)
+        geometry = [(50.0 + index * 0.001, 5.0 + index * 0.002) for index in range(80)]
+        return RouteResult(
+            geometry=geometry,
+            distance_km=14.0,
+            elevation_gain_m=200.0,
+            elevation_loss_m=190.0,
+            provider=self.name,
+            profile="dense",
+            elevations=[100.0 + index for index in range(len(geometry))],
+        )
+
+
+async def test_sparse_gpx_points_are_persisted(monkeypatch, session, settings) -> None:
+    _patch(monkeypatch, [])
+    sparse_settings = settings.model_copy(
+        update={
+            "vision_route_draft_enabled": False,
+            "gpx_shaping_enabled": True,
+            "route_review_enabled": False,
+        }
+    )
+    form = PlanForm(
+        bike_type=BikeType.road, start="Spa", end="Stavelot", distance_km=20
+    )
+    view = await create_plan(
+        form, session, sparse_settings, providers=[DenseProvider()]
+    )
+
+    points = session.exec(select(PlanShapingPoint)).all()
+    assert 2 <= len(points) <= 30
+    assert view.gpx_point_count == len(points)
+    assert all(
+        point.order_index <= following.order_index
+        for point, following in zip(points, points[1:], strict=False)
+    )

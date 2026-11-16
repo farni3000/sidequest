@@ -93,12 +93,17 @@ Antworte ausschließlich mit JSON in genau dieser Form:
 Regeln:
 - loop_radius_factor nur bei Rundtouren, zwischen 0.5 und 1.8.
 - loop_rotation_deg zwischen -180 und 180.
-- free_waypoints: maximal {max_free} Stück, nur wenn sie wirklich helfen.
+- free_waypoints: maximal {max_free} Stück. Setze die visuellen Beobachtungen
+  des Prüfberichts in konkrete Wegpunkte um, statt nur POIs zu tauschen.
+  Mehrere Punkte pro Runde sind ausdrücklich erlaubt, wenn sie die Form oder
+  die Straßenwahl wirklich verbessern.
 - "after" ist "start", "end" oder die osm_id eines aktuell gewählten Highlights.
 - Ändere die Distanz pro Korrektur nur moderat (etwa 20–25 % der aktuellen
   Distanz). Bei zu kurzer Route lieber einen kleinen Umweg, bei zu langer Route
   Umwege/Highlights entfernen. Keine großen Bögen nur zum Verlängern.
-- Freie Wegpunkte sparsam einsetzen; POI-Änderungen sind meist besser.
+- Bevorzuge schöne, ruhige Straßen (Fluss, Wald, Kamm, Aussicht) statt
+  offensichtlicher Hauptverkehrsachsen. Erfinde keine Straßen, die auf der
+  Karte nicht erkennbar sind.
 - Keine Markdown-Codezäune, nur das JSON-Objekt."""
 
 

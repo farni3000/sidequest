@@ -79,6 +79,30 @@ class RoutePlan(SQLModel, table=True):
         }
 
 
+class PlanShapingPoint(SQLModel, table=True):
+    """Sparse, ordered waypoint used for the GPX export.
+
+    The app still stores the full routed geometry; these points are what the
+    exported track contains so that komoot can snap the route to known ways.
+    """
+
+    __tablename__ = "plan_shaping_point"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int | None = Field(default=None, index=True)
+    plan_id: int = Field(foreign_key="route_plan.id", index=True)
+
+    order_index: int = 0
+    lat: float
+    lon: float
+    elevation: float | None = None
+
+    kind: str = "point"  # start | end | highlight | scenic | turn | point
+    label: str | None = None
+    reason: str | None = None
+    osm_id: str | None = None
+
+
 class Highlight(SQLModel, table=True):
     __tablename__ = "highlight"
 

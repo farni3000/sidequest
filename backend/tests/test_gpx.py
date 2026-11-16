@@ -21,6 +21,22 @@ def test_gpx_contains_track_and_waypoints() -> None:
     assert parsed.waypoints[0].name == "Aussichtspunkt"
 
 
+def test_gpx_uses_sparse_shaping_points_when_given() -> None:
+    geometry = [(50.49, 5.86), (50.45, 5.90), (50.39, 5.93)]
+    shaping = [
+        {"lat": 50.49, "lon": 5.86, "elevation": 250.0},
+        {"lat": 50.39, "lon": 5.93, "elevation": 300.0},
+    ]
+
+    xml = build_gpx("Sparse", geometry, shaping_points=shaping)
+    parsed = gpxpy.parse(xml)
+
+    points = parsed.tracks[0].segments[0].points
+    assert len(points) == 2
+    assert points[0].latitude == 50.49
+    assert points[1].elevation == 300.0
+
+
 def test_gpx_without_highlights_is_valid() -> None:
     xml = build_gpx("Nur Route", [(50.0, 5.0), (50.1, 5.1)])
     parsed = gpxpy.parse(xml)
