@@ -37,6 +37,9 @@ Route anhand eines Kartenbilds und korrigiert sie bei Bedarf. Ergebnis ist eine
   Höhenprofil (Chart.js), Highlight-Timeline mit Begründung und GPX-Download.
   Während der Prüfung zeigt ein Live-Log den aktuellen Stand; am Ende bleiben
   Score, Unsicherheit und verbleibende Hinweise sichtbar.
+  Ein Button „Das ist nix. Noch mal von vorne anfangen!“ startet die Planung
+  direkt erneut mit den aktuell gesetzten Eingaben (inkl. Hinweis, vorher
+  Beschreibung, Distanz oder Heat anzupassen).
   Alle Auswahl- und Eingabeelemente sind auf direkte Klicks ausgelegt.
 - SQLModel/SQLite-Persistenz; alle relevanten Tabellen haben von Beginn an ein
   nullable `user_id`-Feld für spätere Multi-User-Erweiterung.

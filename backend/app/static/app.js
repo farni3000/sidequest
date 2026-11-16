@@ -509,6 +509,15 @@
     }
   }
 
+  // "Noch mal von vorne" in the result re-runs the form above with the
+  // inputs it currently holds. Delegated, so it survives every HTML swap.
+  document.body.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target || !target.closest || !target.closest("#retry-plan")) return;
+    var form = document.querySelector('form[hx-post="/plan"]');
+    if (form) form.requestSubmit();
+  });
+
   document.body.addEventListener("htmx:afterSwap", function (event) {
     var target = event.detail.target;
     var holder = target ? target.querySelector("#plan-data") : null;
