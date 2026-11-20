@@ -2,7 +2,7 @@
 #
 # One-command start: bring up the Docker Compose stack and open the app.
 #
-# Usage: ./start.sh [--no-browser] [--region <name>]
+# Usage: ./run.sh [--no-browser] [--region <name>]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

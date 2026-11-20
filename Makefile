@@ -27,7 +27,7 @@ up:
 	docker compose up --build
 
 start:
-	./start.sh
+	./run.sh
 
 down:
 	docker compose down

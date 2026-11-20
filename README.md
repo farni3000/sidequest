@@ -94,7 +94,7 @@ sidequest/
 ## Schnellstart (ein Befehl)
 
 ```bash
-./start.sh
+./run.sh
 ```
 
 Das Skript startet bei Bedarf die Colima-VM, lädt fehlende BRouter-Segmente,
